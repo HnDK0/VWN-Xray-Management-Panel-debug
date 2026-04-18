@@ -36,7 +36,6 @@ set -euo pipefail
 readonly VWN_INSTALLER_VERSION="2.1.0"
 readonly VWN_GITHUB_RAW="https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main"
 readonly VWN_MIN_DISK_MB=1536
-readonly VWN_INSTALL_TIMEOUT=900   # 15 минут
 readonly VWN_LOCK_FILE="/tmp/vwn_install.lock"
 
 # Эти переменные нужны до загрузки модулей И используются модулями —
@@ -63,17 +62,40 @@ _TMPFILES=()
 # lib/ предоставляет только bootstrap-функции (цвета, логирование,
 # step, section, msg). Не реализует то что есть в modules/.
 # -----------------------------------------------------------------
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Определяем: запущены локально (из клонированного репо) или через
+# bash <(curl ...). В последнем случае BASH_SOURCE[0] указывает на
+# /dev/fd/N — локальных lib/ файлов нет, грузим с GitHub.
+# -----------------------------------------------------------------
+_src="${BASH_SOURCE[0]:-}"
+if [[ -n "$_src" && "$_src" != /dev/fd/* && "$_src" != /proc/* && -f "$_src" ]]; then
+    _SCRIPT_DIR="$(cd "$(dirname "$_src")" && pwd)"
+    _LIB_LOCAL=true
+else
+    _LIB_LOCAL=false
+fi
 
 _require_lib() {
     local name="$1"
-    local path="${_SCRIPT_DIR}/lib/${name}.sh"
-    if [[ -f "$path" ]]; then
+    if $_LIB_LOCAL; then
+        local path="${_SCRIPT_DIR}/lib/${name}.sh"
+        if [[ -f "$path" ]]; then
+            # shellcheck disable=SC1090
+            source "$path"
+            return
+        fi
+    fi
+    # Удалённая загрузка (bash <(curl ...) или lib/ не найдена рядом)
+    local url="${VWN_GITHUB_RAW}/lib/${name}.sh"
+    local tmp
+    tmp=$(mktemp /tmp/vwn_lib_XXXXXX.sh)
+    if curl -fsSL --connect-timeout 15 "$url" -o "$tmp" 2>/dev/null; then
         # shellcheck disable=SC1090
-        source "$path"
+        source "$tmp"
+        rm -f "$tmp"
     else
-        echo "FATAL: lib/${name}.sh not found at ${path}" >&2
-        echo "Запустите установщик из директории проекта или скачайте полностью." >&2
+        rm -f "$tmp"
+        echo "FATAL: не удалось загрузить lib/${name}.sh" >&2
+        echo "URL: $url" >&2
         exit 1
     fi
 }
@@ -124,8 +146,7 @@ _cleanup() {
 }
 
 trap '_cleanup $?' EXIT
-trap 'log_error "Прерван сигналом INT"; exit 130'  INT
-trap 'log_error "Прерван сигналом TERM"; exit 143' TERM
+trap 'log_error "Прерван сигналом INT"; exit 130' INT
 
 # Создать временный файл с авто-удалением
 _mktmp() {
@@ -858,14 +879,15 @@ _run_auto() {
 
     export DEBIAN_FRONTEND=noninteractive
     info "Обновление списков пакетов..."
-    timeout 60 bash -c "${PACKAGE_MANAGEMENT_UPDATE}" >/dev/null 2>&1 || true
+    eval "${PACKAGE_MANAGEMENT_UPDATE}" >/dev/null 2>&1 || true
 
-    # installPackage из modules/core.sh — поштучно с индикатором
+    # Ставим все базовые пакеты одной командой — man-db триггер срабатывает один раз
     local base_pkgs=(tar gpg unzip jq nano ufw socat curl qrencode python3)
-    local pkg
-    for pkg in "${base_pkgs[@]}"; do
-        soft_step "Пакет: ${pkg}" installPackage "$pkg"
-    done
+    info "Установка базовых пакетов: ${base_pkgs[*]}"
+    apt-get -y --no-install-recommends \
+        -o Dpkg::Options::="--force-confdef" \
+        -o Dpkg::Options::="--force-confold" \
+        install "${base_pkgs[@]}" >/dev/null 2>&1 || true
 
     step "Xray-core" installXray
 
@@ -1026,15 +1048,6 @@ main() {
 
     # Защита от параллельного запуска (только при первом вызове)
     [[ -z "${VWN_INSTALL_PARENT:-}" ]] && _acquire_lock
-
-    # Обёртка в таймаут 15 минут (только при первом вызове)
-    if [[ -z "${VWN_INSTALL_PARENT:-}" ]]; then
-        export VWN_INSTALL_PARENT=1
-        timeout --foreground "$VWN_INSTALL_TIMEOUT" bash "$0" "$@"
-        exit $?
-    fi
-
-    # ── Отсюда — под таймаутом ────────────────────────────────────
 
     # Порядок: сначала root+OS (нужны для всего остального),
     # потом preflight (диск/интернет), потом зависимости

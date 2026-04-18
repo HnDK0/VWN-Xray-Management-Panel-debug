@@ -270,18 +270,18 @@ identifyOS() {
         exit 1
     fi
     if command -v apt &>/dev/null; then
-        PACKAGE_MANAGEMENT_INSTALL='timeout 300 apt-get -y --no-install-recommends -o Dpkg::Lock::Timeout=60 -o Acquire::http::Timeout=30 -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install'
+        PACKAGE_MANAGEMENT_INSTALL='apt-get -y --no-install-recommends -o Dpkg::Lock::Timeout=120 -o Acquire::http::Timeout=60 -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install'
         PACKAGE_MANAGEMENT_REMOVE='apt purge -y'
-        PACKAGE_MANAGEMENT_UPDATE='timeout 120 apt-get update -o Acquire::http::Timeout=30'
+        PACKAGE_MANAGEMENT_UPDATE='apt-get update -o Acquire::http::Timeout=60'
     elif command -v dnf &>/dev/null; then
-        PACKAGE_MANAGEMENT_INSTALL='timeout 300 dnf -y install --setopt=install_weak_deps=False'
+        PACKAGE_MANAGEMENT_INSTALL='dnf -y install --setopt=install_weak_deps=False'
         PACKAGE_MANAGEMENT_REMOVE='dnf remove -y'
-        PACKAGE_MANAGEMENT_UPDATE='timeout 120 dnf update'
+        PACKAGE_MANAGEMENT_UPDATE='dnf update'
         ${PACKAGE_MANAGEMENT_INSTALL} 'epel-release' &>/dev/null
     elif command -v yum &>/dev/null; then
-        PACKAGE_MANAGEMENT_INSTALL='timeout 300 yum -y install --setopt=install_weak_deps=False'
+        PACKAGE_MANAGEMENT_INSTALL='yum -y install --setopt=install_weak_deps=False'
         PACKAGE_MANAGEMENT_REMOVE='yum remove -y'
-        PACKAGE_MANAGEMENT_UPDATE='timeout 120 yum update'
+        PACKAGE_MANAGEMENT_UPDATE='yum update'
         ${PACKAGE_MANAGEMENT_INSTALL} 'epel-release' &>/dev/null
     else
         echo "error: Package manager not supported."
@@ -301,7 +301,7 @@ installPackage() {
     fi
 
     export DEBIAN_FRONTEND=noninteractive
-    # Используем PACKAGE_MANAGEMENT_INSTALL напрямую — он уже содержит timeout 300
+    # Используем PACKAGE_MANAGEMENT_INSTALL напрямую
     if ${PACKAGE_MANAGEMENT_INSTALL} "$pkg" >/dev/null 2>&1; then
         echo "${green}OK${reset}"
         return 0

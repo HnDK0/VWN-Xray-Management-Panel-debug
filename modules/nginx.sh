@@ -54,6 +54,7 @@ writeNginxConfigBase() {
 
     vwn_conf_set STUB_URL "$proxyUrl"
     vwn_conf_set NGINX_MODE "base"
+    vwn_conf_set DOMAIN    "$domain"
 
     setupRealIpRestore
     _writeSubMapConf

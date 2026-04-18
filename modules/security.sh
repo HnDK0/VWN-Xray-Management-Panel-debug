@@ -173,6 +173,7 @@ setupFail2Ban() {
     ban_action=$(detectFirewallBackend)
 
     ${PACKAGE_MANAGEMENT_INSTALL} "fail2ban" &>/dev/null
+    mkdir -p /etc/fail2ban
 
     local ssh_port
     ssh_port=$(grep -E "^Port " /etc/ssh/sshd_config | awk '{print $2}' | head -1)

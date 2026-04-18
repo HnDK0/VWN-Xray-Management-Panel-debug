@@ -13,7 +13,7 @@
         "queryStrategy": "UseIPv4"
     },
     "inbounds": [{
-        "port": __REALITY_PORT__,
+        "port": __PORT__,
         "listen": "0.0.0.0",
         "protocol": "vless",
         "settings": {
@@ -29,9 +29,9 @@
                 "show": false,
                 "dest": "__DEST__",
                 "xver": 0,
-                "serverNames": ["__SERVER_NAME__"],
-                "privateKey": "__PRIVATE_KEY__",
-                "shortIds": ["__SHORT_ID__"]
+                "serverNames": ["__HOST__"],
+                "privateKey": "__PRIVKEY__",
+                "shortIds": ["__SHORTID__"]
             }
         },
         "sniffing": {

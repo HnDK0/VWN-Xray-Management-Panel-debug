@@ -14,7 +14,7 @@
         "queryStrategy": "UseIPv4"
     },
     "inbounds": [{
-        "port": __XRAY_PORT__,
+        "port": __PORT__,
         "listen": "127.0.0.1",
         "protocol": "vless",
         "settings": {
@@ -27,7 +27,7 @@
             "network": "ws",
             "security": "none",
             "wsSettings": {
-                "path": "__WS_PATH__",
+                "path": "__PATH__",
                 "host": "__DOMAIN__"
             },
             "sockopt": {

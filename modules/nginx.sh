@@ -63,8 +63,10 @@ writeNginxConfigBase() {
 
 writeNginxConfigVision() {
     local proxyUrl="$1" visionDomain="$2"
-    local proxy_host
+    local proxy_host wsPath
     proxy_host=$(echo "$proxyUrl" | sed 's|https://||;s|http://||;s|/.*||')
+    # wsPath берётся из уже записанного xray конфига (xhttp или ws)
+    wsPath=$(jq -r '.inbounds[0].streamSettings.xhttpSettings.path // .inbounds[0].streamSettings.wsSettings.path // ""' "$configPath" 2>/dev/null)
 
     setNginxCert
 
@@ -73,7 +75,8 @@ writeNginxConfigVision() {
 
     # xray.conf — Vision fallback server block (HTTP, без SSL!)
     render_config "$VWN_CONFIG_DIR/nginx_vision.conf" "$nginxPath" \
-        VISION_DOMAIN "$visionDomain" PROXY_URL "$proxyUrl" PROXY_HOST "$proxy_host"
+        VISION_DOMAIN "$visionDomain" PROXY_URL "$proxyUrl" PROXY_HOST "$proxy_host" \
+        PATH "$wsPath"
 
     vwn_conf_set STUB_URL "$proxyUrl"
     vwn_conf_set NGINX_MODE "vision"

@@ -350,7 +350,7 @@ loadAllModules() {
             source "$VWN_LIB/${module}.sh"
         else
             echo "ERROR: Module ${module}.sh not found in $VWN_LIB"
-            echo "Reinstall: bash <(curl -fsSL https://raw.githubusercontent.com/HnDK0/VLESS-WebSocket-TLS-Nginx-WARP/main/install.sh)"
+            echo "Reinstall: bash <(curl -fsSL https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main/install.sh)"
             exit 1
         fi
     done

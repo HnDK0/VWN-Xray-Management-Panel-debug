@@ -20,7 +20,7 @@ case "${1:-}" in
         exit 0
         ;;
     "update")
-        bash <(curl -fsSL https://raw.githubusercontent.com/HnDK0/VLESS-WebSocket-TLS-Nginx-WARP/main/install.sh) --update
+        bash <(curl -fsSL https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main/install.sh) --update
         exit 0
         ;;
     "status")

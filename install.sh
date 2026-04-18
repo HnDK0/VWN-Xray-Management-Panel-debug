@@ -319,7 +319,7 @@ case "${1:-}" in
             | while read -r n; do echo "y" | ufw delete "$n" &>/dev/null; done
         exit 0 ;;
     "update")
-        bash <(curl -fsSL https://raw.githubusercontent.com/HnDK0/VLESS-WebSocket-TLS-Nginx-WARP/main/install.sh) --update
+        bash <(curl -fsSL https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main/install.sh) --update
         exit 0 ;;
 esac
 for mod in lang core xray nginx warp reality relay psiphon tor security logs backup users diag privacy adblock vision xhttp menu; do

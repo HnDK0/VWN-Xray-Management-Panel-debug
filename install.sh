@@ -10,11 +10,13 @@
 #   bash install.sh --help             — справка по --auto
 #
 # АРХИТЕКТУРА:
-#   lib/bootstrap.sh   — цвета, логирование, step/section/msg
-#   lib/preflight.sh   — проверки окружения (root, диск, интернет)
-#   lib/apt_mirrors.sh — выбор рабочего APT-зеркала
+#   install.sh         — самодостаточный файл (bootstrap встроен)
 #   modules/*.sh       — вся логика VPN-стека (загружаются с GitHub)
 #   config/*           — шаблоны конфигурации (загружаются с GitHub)
+#
+# Запуск:
+#   bash install.sh [ОПЦИИ]
+#   bash <(curl -fsSL https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main/install.sh) [ОПЦИИ]
 # =================================================================
 
 # -----------------------------------------------------------------
@@ -57,52 +59,304 @@ VWN_CONFIGS=(nginx_main.conf nginx_base.conf nginx_vision.conf nginx_stream.conf
 # Временные файлы — удаляются через trap
 _TMPFILES=()
 
-# -----------------------------------------------------------------
-# ЗАГРУЗКА LIB/ — немедленно, до всего остального
-# lib/ предоставляет только bootstrap-функции (цвета, логирование,
-# step, section, msg). Не реализует то что есть в modules/.
-# -----------------------------------------------------------------
-# Определяем: запущены локально (из клонированного репо) или через
-# bash <(curl ...). В последнем случае BASH_SOURCE[0] указывает на
-# /dev/fd/N — локальных lib/ файлов нет, грузим с GitHub.
-# -----------------------------------------------------------------
-_src="${BASH_SOURCE[0]:-}"
-if [[ -n "$_src" && "$_src" != /dev/fd/* && "$_src" != /proc/* && -f "$_src" ]]; then
-    _SCRIPT_DIR="$(cd "$(dirname "$_src")" && pwd)"
-    _LIB_LOCAL=true
-else
-    _LIB_LOCAL=false
-fi
+# =================================================================
+# BOOTSTRAP — встроен напрямую (работает и при bash <(curl ...) )
+# =================================================================
 
-_require_lib() {
-    local name="$1"
-    if $_LIB_LOCAL; then
-        local path="${_SCRIPT_DIR}/lib/${name}.sh"
-        if [[ -f "$path" ]]; then
-            # shellcheck disable=SC1090
-            source "$path"
-            return
-        fi
-    fi
-    # Удалённая загрузка (bash <(curl ...) или lib/ не найдена рядом)
-    local url="${VWN_GITHUB_RAW}/lib/${name}.sh"
-    local tmp
-    tmp=$(mktemp /tmp/vwn_lib_XXXXXX.sh)
-    if curl -fsSL --connect-timeout 15 "$url" -o "$tmp" 2>/dev/null; then
-        # shellcheck disable=SC1090
-        source "$tmp"
-        rm -f "$tmp"
+# ── bootstrap.sh ─────────────────────────────────────────────────
+_bootstrap_init_colors() {
+    if [[ -t 1 ]] && command -v tput &>/dev/null; then
+        RED=$(tput setaf 1 2>/dev/null; tput bold 2>/dev/null) || RED=''
+        GREEN=$(tput setaf 2 2>/dev/null; tput bold 2>/dev/null) || GREEN=''
+        YELLOW=$(tput setaf 3 2>/dev/null; tput bold 2>/dev/null) || YELLOW=''
+        CYAN=$(tput setaf 6 2>/dev/null; tput bold 2>/dev/null) || CYAN=''
+        RESET=$(tput sgr0 2>/dev/null) || RESET=''
     else
-        rm -f "$tmp"
-        echo "FATAL: не удалось загрузить lib/${name}.sh" >&2
-        echo "URL: $url" >&2
-        exit 1
+        RED='' GREEN='' YELLOW='' CYAN='' RESET=''
+    fi
+
+    # Lowercase-алиасы — для совместимости с modules/*.sh
+    # (lang.sh, core.sh, security.sh и др. используют $red/$green/$reset)
+    red="$RED"; green="$GREEN"; yellow="$YELLOW"
+    cyan="$CYAN"; reset="$RESET"
+
+    export RED GREEN YELLOW CYAN RESET
+    export red green yellow cyan reset
+}
+_bootstrap_init_colors
+
+# -----------------------------------------------------------------
+# ЛОГИРОВАНИЕ — единственное место записи в лог
+# LOG_FILE передаётся из install.sh как обычная переменная (не readonly)
+# -----------------------------------------------------------------
+_log() {
+    local level="$1"; shift
+    local ts; ts=$(date '+%H:%M:%S' 2>/dev/null || echo '??:??:??')
+    printf '[%s] [%-5s] %s\n' "$ts" "$level" "$*" >> "${LOG_FILE:-/var/log/vwn_install.log}" 2>/dev/null || true
+}
+
+log_info()  { _log "INFO " "$@"; }
+log_ok()    { _log "OK   " "$@"; }
+log_warn()  { _log "WARN " "$@"; }
+log_error() { _log "ERROR" "$@"; }
+
+# -----------------------------------------------------------------
+# ВЫВОД — с одновременной записью в лог
+# -----------------------------------------------------------------
+info()  { echo -e "${CYAN}$*${RESET}";   log_info  "$*"; }
+ok()    { echo -e "${GREEN}$*${RESET}";  log_ok    "$*"; }
+warn()  { echo -e "${YELLOW}$*${RESET}"; log_warn  "$*"; }
+err()   { echo -e "${RED}$*${RESET}" >&2; log_error "$*"; }
+die()   { err "ОШИБКА: $*"; exit 1; }
+
+# -----------------------------------------------------------------
+# STEP — запускает команду с индикатором [OK] / [FAIL]
+# Используется только в install.sh. После load_modules() модули
+# используют свой run_task() с другим форматом — это ОК, они
+# работают в своём контексте (интерактивное меню).
+# -----------------------------------------------------------------
+step() {
+    local desc="$1"; shift
+    printf "  %-52s" "$desc"
+    log_info "STEP: ${desc}"
+
+    local output rc=0
+    output=$("$@" 2>&1) || rc=$?
+
+    if (( rc == 0 )); then
+        echo -e " ${GREEN}[OK]${RESET}"
+        log_ok "  → OK"
+    else
+        echo -e " ${RED}[FAIL]${RESET}"
+        log_error "  → FAIL rc=${rc}: ${output}"
+        return $rc
     fi
 }
 
-_require_lib "bootstrap"    # цвета + log_* + step/section/msg/die/warn
-_require_lib "preflight"    # check_root/disk/internet/repo + run_preflight_checks
-_require_lib "apt_mirrors"  # fix_apt_mirrors
+# Non-fatal вариант — SKIP вместо FAIL
+soft_step() {
+    local desc="$1"; shift
+    printf "  %-52s" "$desc"
+    log_info "SOFT: ${desc}"
+
+    if "$@" &>/dev/null; then
+        echo -e " ${GREEN}[OK]${RESET}"
+        log_ok "  → OK"
+    else
+        echo -e " ${YELLOW}[SKIP]${RESET}"
+        log_warn "  → SKIP (non-fatal)"
+    fi
+}
+
+# -----------------------------------------------------------------
+# SECTION — визуальный разделитель этапов
+# -----------------------------------------------------------------
+section() {
+    echo ""
+    echo -e "${CYAN}━━━ $* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+    log_info "=== SECTION: $* ==="
+}
+
+# -----------------------------------------------------------------
+# MSG — fallback до загрузки modules/lang.sh
+# После load_modules() → _initLang() заполняет MSG[] и msg() из
+# modules/lang.sh начинает работать нормально.
+# ВАЖНО: мы НЕ переопределяем msg() после load_modules — lang.sh
+# делает это сам через объявление функции поверх нашей.
+# -----------------------------------------------------------------
+msg() {
+    # Если lang.sh уже загружен и заполнил MSG[] — используем его
+    if declare -p MSG &>/dev/null 2>&1 && [[ -n "${MSG[${1:-}]+x}" ]]; then
+        echo "${MSG[$1]}"
+        return
+    fi
+
+    # Fallback-таблица (минимум для фазы bootstrap)
+    case "${1:-}" in
+        run_as_root)      echo "Run as root!" ;;
+        os_unsupported)   echo "Only apt/dnf/yum systems supported." ;;
+        install_deps)     echo "Installing dependencies..." ;;
+        install_modules)  echo "Downloading modules..." ;;
+        install_vwn)      echo "Installing vwn binary..." ;;
+        install_title)    echo "VWN — Xray VLESS + WARP + CDN + Reality" ;;
+        update_title)     echo "VWN — Updating modules" ;;
+        update_done)      echo "Update complete! Version" ;;
+        install_done)     echo "Modules installed in" ;;
+        install_version)  echo "Version" ;;
+        launching_menu)   echo "Launching setup menu..." ;;
+        module_fail)      echo "Failed to download" ;;
+        auto_done)        echo "Unattended installation complete!" ;;
+        run_vwn)          echo "Run: vwn" ;;
+        yes_no)           echo "(y/n)" ;;
+        press_enter)      echo "Press Enter..." ;;
+        choose)           echo "Choice: " ;;
+        back)             echo "Back" ;;
+        cancel)           echo "Cancelled." ;;
+        done)             echo "Done." ;;
+        error)            echo "Error" ;;
+        invalid)          echo "Invalid input!" ;;
+        invalid_port)     echo "Invalid port." ;;
+        no_logs)          echo "No logs" ;;
+        restarted)        echo "Restarted." ;;
+        removed)          echo "Removed." ;;
+        swap_creating)    echo "Creating swap file" ;;
+        swap_created)     echo "Swap created:" ;;
+        swap_fail)        echo "Swap creation failed, continuing..." ;;
+        installed_in)     echo "installed in" ;;
+        *)                echo "${1:-}" ;;
+    esac
+}
+
+# ── preflight.sh ─────────────────────────────────────────────────
+check_root() {
+    [[ "$EUID" -eq 0 ]] || die "Запустите от имени root (sudo bash install.sh)"
+    log_ok "Root: EUID=$EUID"
+}
+
+# -----------------------------------------------------------------
+# ОС — определяет PKG_MGR для использования внутри preflight
+# НЕ устанавливает PACKAGE_MANAGEMENT_* — это делает modules/core.sh::identifyOS()
+# -----------------------------------------------------------------
+check_os() {
+    if command -v apt &>/dev/null; then
+        PKG_MGR="apt"
+    elif command -v dnf &>/dev/null; then
+        PKG_MGR="dnf"
+    elif command -v yum &>/dev/null; then
+        PKG_MGR="yum"
+    else
+        die "Поддерживаются только системы с apt / dnf / yum"
+    fi
+    export PKG_MGR
+    log_ok "OS check: PKG_MGR=$PKG_MGR"
+}
+
+# -----------------------------------------------------------------
+# Свободное место
+# -----------------------------------------------------------------
+check_disk_space() {
+    local required="${1:-1536}"
+    local free_mb; free_mb=$(df -m / | awk 'NR==2{print $4}')
+    (( free_mb >= required )) \
+        || die "Мало места: ${free_mb} МБ (нужно минимум ${required} МБ)"
+    log_ok "Диск: ${free_mb} МБ свободно"
+}
+
+# -----------------------------------------------------------------
+# Интернет
+# -----------------------------------------------------------------
+check_internet() {
+    local ok=false
+    local hosts=(1.1.1.1 8.8.8.8 github.com)
+    for h in "${hosts[@]}"; do
+        if curl -fsS --connect-timeout 5 --max-time 8 \
+                -o /dev/null "https://${h}" 2>/dev/null; then
+            ok=true; break
+        fi
+    done
+    $ok || die "Нет доступа к интернету. Проверьте сетевые настройки."
+    log_ok "Интернет: OK"
+}
+
+# -----------------------------------------------------------------
+# GitHub репозиторий
+# -----------------------------------------------------------------
+check_repo_access() {
+    local url="${VWN_GITHUB_RAW}/install.sh"
+    if curl -fsS --connect-timeout 10 --max-time 15 \
+            -o /dev/null "$url" 2>/dev/null; then
+        log_ok "GitHub: OK"
+        return 0
+    fi
+    log_warn "GitHub недоступен напрямую: $url"
+    return 1
+}
+
+# -----------------------------------------------------------------
+# Запуск всех проверок перед установкой
+# -----------------------------------------------------------------
+run_preflight_checks() {
+    section "Проверка окружения"
+    step     "Root-права"              check_root
+    step     "Определение ОС"          check_os
+    step     "Свободное место (≥1.5 ГБ)" check_disk_space "$VWN_MIN_DISK_MB"
+    step     "Интернет"                check_internet
+    soft_step "GitHub-репозиторий"     check_repo_access
+}
+
+# ── apt_mirrors.sh ───────────────────────────────────────────────
+_bootstrap_kill_apt() {
+    killall -9 apt apt-get dpkg dpkg-deb unattended-upgrades 2>/dev/null || true
+    fuser -kk /var/lib/dpkg/lock* /var/cache/apt/archives/lock \
+               /var/lib/apt/lists/lock* 2>/dev/null || true
+    sleep 0.5
+    rm -f /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend \
+          /var/cache/apt/archives/lock /var/lib/apt/lists/lock*
+    export DEBIAN_FRONTEND=noninteractive
+    dpkg --configure -a --force-confold --force-confdef 2>/dev/null || true
+}
+
+_bootstrap_apt_update() {
+    timeout 30 apt-get \
+        -o Acquire::ForceIPv4=true \
+        -o Acquire::http::Timeout=15 \
+        update -qq 2>/dev/null
+}
+
+# -----------------------------------------------------------------
+# Основная функция — пробует зеркала по очереди
+# Вызывается один раз в начале установки
+# -----------------------------------------------------------------
+fix_apt_mirrors() {
+    # Для не-apt систем — ничего не делаем
+    [[ "${PKG_MGR:-apt}" != "apt" ]] && return 0
+
+    _bootstrap_kill_apt
+
+    # Сначала пробуем стандартный репозиторий
+    if _bootstrap_apt_update; then
+        log_ok "APT: стандартное зеркало OK"
+        return 0
+    fi
+
+    warn "APT: основной репозиторий не отвечает, пробуем зеркала..."
+
+    local mirrors=(
+        "http://ftp.ru.debian.org/debian/"
+        "http://mirror.rol.ru/debian/"
+        "http://debian.mirohost.net/debian/"
+        "http://debian-mirror.ru/debian/"
+        "http://ftp.debian.org/debian/"
+    )
+
+    cp -a /etc/apt/sources.list /etc/apt/sources.list.vwn_backup 2>/dev/null || true
+
+    local mirror
+    for mirror in "${mirrors[@]}"; do
+        printf "  Зеркало %-45s" "$mirror"
+        log_info "APT: пробуем $mirror"
+
+        sed -e "s|http://.*debian.org/debian/|${mirror}|g" \
+            -e "s|http://security.debian.org/|${mirror}|g" \
+            /etc/apt/sources.list > /etc/apt/sources.list.tmp
+        mv /etc/apt/sources.list.tmp /etc/apt/sources.list
+
+        _bootstrap_kill_apt
+        if _bootstrap_apt_update; then
+            echo -e " ${GREEN}[OK]${RESET}"
+            log_ok "APT: зеркало OK: $mirror"
+            return 0
+        else
+            echo -e " ${RED}[FAIL]${RESET}"
+        fi
+    done
+
+    # Откат на оригинал
+    mv /etc/apt/sources.list.vwn_backup /etc/apt/sources.list 2>/dev/null || true
+    _bootstrap_kill_apt
+    warn "APT: все зеркала недоступны, используем стандартный"
+}
+
 
 # -----------------------------------------------------------------
 # ИНИЦИАЛИЗАЦИЯ ЛОГА
@@ -186,7 +440,7 @@ _acquire_lock() {
 # ВАЖНО: modules/core.sh переопределяет msg, run_task, isRoot,
 # identifyOS, installPackage, prepareApt, getServerIP и др.
 # Это ОЖИДАЕМО — модули содержат "правильные" версии этих функций
-# с полной логикой. lib/bootstrap.sh предоставлял лишь fallback.
+# с полной логикой. Bootstrap встроен напрямую в install.sh.
 # -----------------------------------------------------------------
 load_modules() {
     log_info "Загрузка модулей..."

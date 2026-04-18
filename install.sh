@@ -34,7 +34,7 @@ set -euo pipefail
 # — поэтому они НЕ readonly здесь.
 # -----------------------------------------------------------------
 readonly VWN_INSTALLER_VERSION="2.1.0"
-readonly VWN_GITHUB_RAW="https://raw.githubusercontent.com/HnDK0/VLESS-WebSocket-TLS-Nginx-WARP/main"
+readonly VWN_GITHUB_RAW="https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main"
 readonly VWN_MIN_DISK_MB=1536
 readonly VWN_INSTALL_TIMEOUT=900   # 15 минут
 readonly VWN_LOCK_FILE="/tmp/vwn_install.lock"
@@ -67,14 +67,25 @@ _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _require_lib() {
     local name="$1"
+    # Сначала проверяем локальную папку (для git clone)
     local path="${_SCRIPT_DIR}/lib/${name}.sh"
+    
     if [[ -f "$path" ]]; then
         # shellcheck disable=SC1090
         source "$path"
     else
-        echo "FATAL: lib/${name}.sh not found at ${path}" >&2
-        echo "Запустите установщик из директории проекта или скачайте полностью." >&2
-        exit 1
+        # Если локально нет (режим curl | bash), качаем во временную папку
+        local tmp_lib="/tmp/vwn_libs/${name}.sh"
+        mkdir -p "/tmp/vwn_libs"
+        
+        # Тянем из репозитория (используем твою константу VWN_GITHUB_RAW)
+        if curl -fsSL "${VWN_GITHUB_RAW}/lib/${name}.sh" -o "$tmp_lib"; then
+            # shellcheck disable=SC1090
+            source "$tmp_lib"
+        else
+            echo "FATAL: lib/${name}.sh not found locally and download failed" >&2
+            exit 1
+        fi
     fi
 }
 

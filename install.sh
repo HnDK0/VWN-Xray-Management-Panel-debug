@@ -860,28 +860,29 @@ _print_auto_params() {
     echo -e "   Параметры установки:"
     echo -e "${CYAN}$(printf '─%.0s' {1..64})${RESET}"
 
-    # Вспомогательная функция для печати строки параметра
-    _print_param() { printf "  ${CYAN}%-16s${RESET}: ${GREEN}%s${RESET}\n" "$1" "$2"; }
+    # Вспомогательная функция — фиксированный разделитель, без printf-выравнивания
+    # (printf %-Ns не работает с кириллицей — считает байты, а не символы)
+    _print_param() { echo -e "  ${CYAN}${1}${RESET}: ${GREEN}${2}${RESET}"; }
 
-    _print_param "Режим"       "$mode"
+    _print_param "Режим"      "$mode"
     [[ -n "$OPT_DOMAIN" ]]         && _print_param "Домен"      "$OPT_DOMAIN"
-    ! $OPT_SKIP_WS                 && _print_param "Stub URL"   "$OPT_STUB"
-    ! $OPT_SKIP_WS                 && _print_param "Xray порт"  "$OPT_PORT"
-    ! $OPT_SKIP_WS                 && _print_param "SSL метод"  "$OPT_CERT_METHOD"
-    $OPT_REALITY                   && _print_param "Reality"    "${OPT_REALITY_DEST}  порт=${OPT_REALITY_PORT}"
-    $OPT_VISION                    && _print_param "Vision"     "$OPT_DOMAIN"
-    $OPT_STREAM && ! $OPT_VISION   && _print_param "Stream SNI" "включён"
+    ! $OPT_SKIP_WS                 && _print_param "Stub URL"    "$OPT_STUB"
+    ! $OPT_SKIP_WS                 && _print_param "Xray порт"   "$OPT_PORT"
+    ! $OPT_SKIP_WS                 && _print_param "SSL метод"   "$OPT_CERT_METHOD"
+    $OPT_REALITY                   && _print_param "Reality"     "${OPT_REALITY_DEST}  порт=${OPT_REALITY_PORT}"
+    $OPT_VISION                    && _print_param "Vision"      "$OPT_DOMAIN"
+    $OPT_STREAM && ! $OPT_VISION   && _print_param "Stream SNI"  "включён"
     [[ -n "$OPT_SSH_PORT" ]]       && _print_param "SSH порт"   "$OPT_SSH_PORT"
-    $OPT_IPV6                      && _print_param "IPv6"       "включён"
-    $OPT_CPU_GUARD                 && _print_param "CPU Guard"  "включён"
-    $OPT_FAIL2BAN                  && _print_param "Fail2Ban"   "включён"
-    $OPT_JAIL                      && _print_param "WebJail"    "включён"
-    $OPT_ADBLOCK                   && _print_param "Adblock"    "включён"
-    $OPT_PRIVACY                   && _print_param "Privacy"    "включён"
-    $OPT_PSIPHON                   && _print_param "Psiphon"    "включён${OPT_PSIPHON_COUNTRY:+ (${OPT_PSIPHON_COUNTRY})}${OPT_PSIPHON_WARP:+ +WARP}"
-    $OPT_BBR                       && _print_param "BBR"        "включён"
-    $OPT_NO_WARP                   && _print_param "WARP"       "ПРОПУЩЕН"
-    _print_param "Язык"        "$OPT_LANG"
+    $OPT_IPV6                      && _print_param "IPv6"        "включён"
+    $OPT_CPU_GUARD                 && _print_param "CPU Guard"   "включён"
+    $OPT_FAIL2BAN                  && _print_param "Fail2Ban"    "включён"
+    $OPT_JAIL                      && _print_param "WebJail"     "включён"
+    $OPT_ADBLOCK                   && _print_param "Adblock"     "включён"
+    $OPT_PRIVACY                   && _print_param "Privacy"     "включён"
+    $OPT_PSIPHON                   && _print_param "Psiphon"     "включён${OPT_PSIPHON_COUNTRY:+ (${OPT_PSIPHON_COUNTRY})}${OPT_PSIPHON_WARP:+ +WARP}"
+    $OPT_BBR                       && _print_param "BBR"         "включён"
+    $OPT_NO_WARP                   && _print_param "WARP"        "ПРОПУЩЕН"
+    _print_param "Язык"       "$OPT_LANG"
 
     echo -e "${CYAN}$(printf '─%.0s' {1..64})${RESET}"
     echo ""

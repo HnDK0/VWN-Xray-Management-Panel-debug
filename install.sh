@@ -69,12 +69,12 @@ _require_lib() {
     local name="$1"
     local path="${_SCRIPT_DIR}/lib/${name}.sh"
     if [[ -f "$path" ]]; then
+        # shellcheck disable=SC1090
         source "$path"
     else
-        # Если запустили через curl | bash
-        mkdir -p /tmp/vwn/lib
-        curl -fsSL "https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main/lib/${name}.sh" -o "/tmp/vwn/lib/${name}.sh"
-        source "/tmp/vwn/lib/${name}.sh"
+        echo "FATAL: lib/${name}.sh not found at ${path}" >&2
+        echo "Запустите установщик из директории проекта или скачайте полностью." >&2
+        exit 1
     fi
 }
 

@@ -272,7 +272,7 @@ writeXrayConfig() {
     local xrayPort="$1"
     local wsPath="$2"
     local domain="$3"
-    local new_uuid
+    local new_uuid=""
     local USERS_FILE="${USERS_FILE:-/usr/local/etc/xray/users.conf}"
 
     # Если users.conf уже есть — берём UUID первого пользователя

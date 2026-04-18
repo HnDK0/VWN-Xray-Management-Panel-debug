@@ -36,7 +36,7 @@ setNginxCert() {
 
 writeNginxConfigBase() {
     local xrayPort="$1" domain="$2" proxyUrl="$3" wsPath="$4"
-    local proxy_host
+    local proxy_host=""
     proxy_host=$(echo "$proxyUrl" | sed 's|https://||;s|http://||;s|/.*||')
 
     setNginxCert

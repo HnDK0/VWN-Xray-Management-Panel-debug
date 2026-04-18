@@ -19,7 +19,7 @@ writeRealityConfig() {
     local destHost="${dest%%:*}"
 
     echo -e "${cyan}$(msg reality_keygen)${reset}"
-    local keys privKey pubKey shortId new_uuid
+    local keys="" privKey="" pubKey="" shortId="" new_uuid=""
     local USERS_FILE="${USERS_FILE:-/usr/local/etc/xray/users.conf}"
 
     # Находим xray — может быть в нескольких местах

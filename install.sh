@@ -67,23 +67,27 @@ _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _require_lib() {
     local name="$1"
-    # Сначала проверяем локальную папку (для git clone)
     local path="${_SCRIPT_DIR}/lib/${name}.sh"
     
     if [[ -f "$path" ]]; then
         # shellcheck disable=SC1090
         source "$path"
     else
-        # Если локально нет (режим curl | bash), качаем во временную папку
-        local tmp_lib="/tmp/vwn_libs/${name}.sh"
-        mkdir -p "/tmp/vwn_libs"
+        # Режим запуска через curl | bash
+        local lib_dir="/tmp/vwn_libs"
+        mkdir -p "$lib_dir"
+        local tmp_path="${lib_dir}/${name}.sh"
         
-        # Тянем из репозитория (используем твою константу VWN_GITHUB_RAW)
-        if curl -fsSL "${VWN_GITHUB_RAW}/lib/${name}.sh" -o "$tmp_lib"; then
+        # Используем актуальный URL дебаг-репозитория
+        local lib_url="https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main/lib/${name}.sh"
+        
+        # Качаем с выводом ошибки, если не вышло
+        if curl -fsSL "$lib_url" -o "$tmp_path"; then
             # shellcheck disable=SC1090
-            source "$tmp_lib"
+            source "$tmp_path"
         else
-            echo "FATAL: lib/${name}.sh not found locally and download failed" >&2
+            echo -e "\n\e[31m[FATAL]\e[0m Не удалось загрузить: lib/${name}.sh" >&2
+            echo -e "Проверь URL: $lib_url" >&2
             exit 1
         fi
     fi

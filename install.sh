@@ -68,28 +68,13 @@ _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _require_lib() {
     local name="$1"
     local path="${_SCRIPT_DIR}/lib/${name}.sh"
-    
     if [[ -f "$path" ]]; then
-        # shellcheck disable=SC1090
         source "$path"
     else
-        # Режим запуска через curl | bash
-        local lib_dir="/tmp/vwn_libs"
-        mkdir -p "$lib_dir"
-        local tmp_path="${lib_dir}/${name}.sh"
-        
-        # Используем актуальный URL дебаг-репозитория
-        local lib_url="https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main/lib/${name}.sh"
-        
-        # Качаем с выводом ошибки, если не вышло
-        if curl -fsSL "$lib_url" -o "$tmp_path"; then
-            # shellcheck disable=SC1090
-            source "$tmp_path"
-        else
-            echo -e "\n\e[31m[FATAL]\e[0m Не удалось загрузить: lib/${name}.sh" >&2
-            echo -e "Проверь URL: $lib_url" >&2
-            exit 1
-        fi
+        # Если запустили через curl | bash
+        mkdir -p /tmp/vwn/lib
+        curl -fsSL "https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main/lib/${name}.sh" -o "/tmp/vwn/lib/${name}.sh"
+        source "/tmp/vwn/lib/${name}.sh"
     fi
 }
 

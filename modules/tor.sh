@@ -134,7 +134,7 @@ setupTorService() {
 applyTorOutbound() {
     local tor_ob='{"tag":"tor","protocol":"socks","settings":{"servers":[{"address":"127.0.0.1","port":40003}]}}'
 
-    for cfg in "$configPath" "$realityConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
         [ -f "$cfg" ] || continue
         local has_ob
         has_ob=$(jq '.outbounds[] | select(.tag=="tor")' "$cfg" 2>/dev/null)
@@ -145,7 +145,7 @@ applyTorOutbound() {
         local has_rule
         has_rule=$(jq '.routing.rules[] | select(.outboundTag=="tor")' "$cfg" 2>/dev/null)
         if [ -z "$has_rule" ]; then
-            jq '.routing.rules = [.routing.rules[0]] + [{"type":"field","domain":[],"outboundTag":"tor"}] + .routing.rules[1:]' \
+            jq '.routing.rules = [.routing.rules[0]] + [{"type":"field","domain":["domain:test.com"],"outboundTag":"tor"}] + .routing.rules[1:]' \
                 "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
         fi
     done
@@ -165,36 +165,40 @@ applyTorDomains() {
 
     applyTorOutbound
 
-    for cfg in "$configPath" "$realityConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
         [ -f "$cfg" ] || continue
         jq "(.routing.rules[] | select(.outboundTag == \"tor\")) |= (.domain = [$domains_json] | del(.port))" \
             "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
     done
     systemctl restart xray 2>/dev/null || true
     systemctl restart xray-reality 2>/dev/null || true
+    systemctl restart xray-vision 2>/dev/null || true
     echo "${green}$(msg tor_split_ok)${reset}"
 }
 
 toggleTorGlobal() {
     applyTorOutbound
-    for cfg in "$configPath" "$realityConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
         [ -f "$cfg" ] || continue
         jq '(.routing.rules[] | select(.outboundTag == "tor")) |= (.port = "0-65535" | del(.domain))' \
             "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
     done
     systemctl restart xray 2>/dev/null || true
     systemctl restart xray-reality 2>/dev/null || true
+    systemctl restart xray-vision 2>/dev/null || true
+    rebuildAllSubFiles 2>/dev/null || true
     echo "${green}$(msg tor_global_ok)${reset}"
 }
 
 removeTorFromConfigs() {
-    for cfg in "$configPath" "$realityConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
         [ -f "$cfg" ] || continue
         jq 'del(.outbounds[] | select(.tag=="tor")) | del(.routing.rules[] | select(.outboundTag=="tor"))' \
             "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
     done
     systemctl restart xray 2>/dev/null || true
     systemctl restart xray-reality 2>/dev/null || true
+    systemctl restart xray-vision 2>/dev/null || true
 }
 
 checkTorIP() {
@@ -206,7 +210,7 @@ checkTorIP() {
         if [ -n "$ip" ]; then
             echo "$ip"
             local country
-            country=$(curl -s --connect-timeout 5 -x socks5://127.0.0.1:${TOR_PORT}                 "https://ip-api.com/line/${ip}?fields=countryCode" 2>/dev/null | tr -d '[:space:]')
+            country=$(curl -s --connect-timeout 5 -x socks5://127.0.0.1:${TOR_PORT}                 "http://ip-api.com/line/${ip}?fields=countryCode" 2>/dev/null | tr -d '[:space:]')
             echo "$(msg tor_exit_country) : ${country:-$(msg unknown)}"
             return 0
         fi
@@ -251,17 +255,12 @@ changeTorCountry() {
     esac
 
     # Обновляем конфиг
-    # ИСПРАВЛЕНО: используем mktemp вместо /tmp для защиты от symlink attack
-    local tmpfile
-    tmpfile=$(mktemp /root/.vwn-torrc-XXXXXX)
-    chmod 600 "$tmpfile"
-    trap 'rm -f "$tmpfile"' RETURN
-    grep -v "^ExitNodes\|^StrictNodes" "$TOR_CONFIG" > "$tmpfile"
+    grep -v "^ExitNodes\|^StrictNodes" "$TOR_CONFIG" > /tmp/torrc.tmp
     if [ -n "$country" ]; then
-        echo "ExitNodes {${country}}" >> "$tmpfile"
-        echo "StrictNodes 1" >> "$tmpfile"
+        echo "ExitNodes {${country}}" >> /tmp/torrc.tmp
+        echo "StrictNodes 1" >> /tmp/torrc.tmp
     fi
-    mv "$tmpfile" "$TOR_CONFIG"
+    mv /tmp/torrc.tmp "$TOR_CONFIG"
     systemctl restart tor
     echo "${green}$(msg tor_country_changed) ${country:-$(msg auto)}. $(msg tor_country_restarting)${reset}"
 }
@@ -397,13 +396,8 @@ addTorBridges() {
     fi
 
     # Удаляем старые настройки мостов
-    # ИСПРАВЛЕНО: используем mktemp вместо /tmp для защиты от symlink attack
-    local tmpfile
-    tmpfile=$(mktemp /root/.vwn-torrc-XXXXXX)
-    chmod 600 "$tmpfile"
-    trap 'rm -f "$tmpfile"' RETURN
-    grep -v "^UseBridges\|^ClientTransportPlugin\|^Bridge " "$TOR_CONFIG" > "$tmpfile"
-    mv "$tmpfile" "$TOR_CONFIG"
+    grep -v "^UseBridges\|^ClientTransportPlugin\|^Bridge " "$TOR_CONFIG" > /tmp/torrc.tmp
+    mv /tmp/torrc.tmp "$TOR_CONFIG"
 
     # Добавляем новые
     echo "UseBridges 1" >> "$TOR_CONFIG"
@@ -429,13 +423,8 @@ addTorBridges() {
 }
 
 removeTorBridges() {
-    # ИСПРАВЛЕНО: используем mktemp вместо /tmp для защиты от symlink attack
-    local tmpfile
-    tmpfile=$(mktemp /root/.vwn-torrc-XXXXXX)
-    chmod 600 "$tmpfile"
-    trap 'rm -f "$tmpfile"' RETURN
-    grep -v "^UseBridges\|^ClientTransportPlugin\|^Bridge " "$TOR_CONFIG" > "$tmpfile"
-    mv "$tmpfile" "$TOR_CONFIG"
+    grep -v "^UseBridges\|^ClientTransportPlugin\|^Bridge " "$TOR_CONFIG" > /tmp/torrc.tmp
+    mv /tmp/torrc.tmp "$TOR_CONFIG"
     systemctl restart tor
     echo "${green}$(msg tor_bridge_removed)${reset}"
 }

@@ -79,7 +79,7 @@ rebuildAllConfigs() {
     echo "${green}All configs rebuilt successfully.${reset}"
 }
 
-VWN_VERSION="3.1"
+VWN_VERSION="1.0"
 VWN_LIB="/usr/local/lib/vwn"
 
 # Цвета

@@ -73,6 +73,11 @@ writeNginxConfigVision() {
     # nginx.conf — общая часть
     cp "$VWN_CONFIG_DIR/nginx_main.conf" /etc/nginx/nginx.conf
 
+    # В Vision режиме default.conf не нужен — nginx_vision.conf уже содержит
+    # listen 80 default_server с редиректом на https. Удаляем чтобы не было
+    # "duplicate default server" конфликта.
+    rm -f /etc/nginx/conf.d/default.conf
+
     # xray.conf — Vision fallback server block (HTTP, без SSL!)
     render_config "$VWN_CONFIG_DIR/nginx_vision.conf" "$nginxPath" \
         VISION_DOMAIN "$visionDomain" PROXY_URL "$proxyUrl" PROXY_HOST "$proxy_host" \

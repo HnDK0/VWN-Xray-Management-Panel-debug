@@ -754,7 +754,8 @@ _initLang() {
     # ── Пункты меню ──────────────────────────────────────────────────────────
     MSG[menu_sub_auth]=$(         [ "$VWN_LANG" = en ] && echo "Subscription auth (basic auth)"    || echo "Пароль на подписки (basic auth)")
     # ── Vision ───────────────────────────────────────────────────────────────
-    MSG[menu_vision]=$(              [ "$VWN_LANG" = en ] && echo "Manage VLESS+TLS+Vision flow"          || echo "Управление VLESS+TLS+Vision flow")
+    MSG[menu_vision]=$(              [ "$VWN_LANG" = en ] && echo "Vision/XHTTP (port 443)"               || echo "Vision/XHTTP (порт 443)")
+    MSG[menu_xhttp]=$(               [ "$VWN_LANG" = en ] && echo "Manage XHTTP (CDN transport)"          || echo "Управление XHTTP (CDN транспорт)")
     MSG[vision_title]=$(             [ "$VWN_LANG" = en ] && echo "=== VLESS + TLS + Vision ==="            || echo "=== VLESS + TLS + Vision ===")
     MSG[vision_install]=$(           [ "$VWN_LANG" = en ] && echo "Install Vision"                          || echo "Установить Vision")
     MSG[vision_remove]=$(            [ "$VWN_LANG" = en ] && echo "Remove Vision"                           || echo "Удалить Vision")

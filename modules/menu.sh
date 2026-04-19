@@ -334,12 +334,13 @@ menu() {
     trap 'echo; echo -e "${yellow}Отмена${reset}"; read -rp "Нажмите Enter чтобы продолжить... "; return' INT
 
     while true; do
-        local s_nginx s_ws s_reality s_vision s_warp s_ssl s_bbr s_f2b s_jail s_cfguard s_relay s_psiphon s_tor s_connect
+        local s_nginx s_ws s_reality s_vision s_xhttp s_warp s_ssl s_bbr s_f2b s_jail s_cfguard s_relay s_psiphon s_tor s_connect
         clear
         s_nginx=$(getServiceStatus nginx)
         s_ws=$(getServiceStatus xray)
         s_reality=$(getServiceStatus xray-reality)
         s_vision=$(getServiceStatus xray-vision)
+        s_xhttp=$(getXhttpStatus)
         s_warp=$(getWarpStatus)
         s_ssl=$(checkCertExpiry)
         s_bbr=$(getBbrStatus)
@@ -383,6 +384,7 @@ menu() {
         echo -e "  $(printf "%-9s" "WS:")$s_ws_c,  Nginx: $s_nginx_c"
         echo -e "  $(printf "%-9s" "Reality:")$s_reality_c,  SSL: $s_ssl"
         echo -e "  $(printf "%-9s" "Vision:")$s_vision_c,  CF Guard: $s_cfguard"
+        echo -e "  $(printf "%-9s" "XHTTP:")$s_xhttp"
         [ -n "$s_connect" ] && echo -e "  CDN: ${green}${s_connect}${reset}"
         echo -e "  ${cyan}── $(msg menu_sep_tun_short) ───────────────────────────────────────────────${reset}"
         echo -e "  WARP: $s_warp,  Relay: $s_relay,  Psiphon: $s_psiphon,  Tor: $s_tor"
@@ -396,35 +398,36 @@ menu() {
         echo -e "  ${green}3.${reset}  $(msg menu_ws)"
         echo -e "  ${green}4.${reset}  $(msg menu_reality)"
         echo -e "  ${green}5.${reset}  $(msg menu_vision)"
+        echo -e "  ${green}6.${reset}  $(msg menu_xhttp)"
         echo -e "  $(msg menu_sep_tun)"
-        echo -e "  ${green}6.${reset}  $(msg menu_warp)"
-        echo -e "  ${green}7.${reset}  $(msg menu_relay)"
-        echo -e "  ${green}8.${reset}  $(msg menu_psiphon)"
-        echo -e "  ${green}9.${reset}  $(msg menu_tor)"
+        echo -e "  ${green}7.${reset}  $(msg menu_warp)"
+        echo -e "  ${green}8.${reset}  $(msg menu_relay)"
+        echo -e "  ${green}9.${reset}  $(msg menu_psiphon)"
+        echo -e "  ${green}10.${reset} $(msg menu_tor)"
         echo -e "  $(msg menu_sep_sec)"
-        echo -e "  ${green}10.${reset} $(msg menu_bbr)"
-        echo -e "  ${green}11.${reset} $(msg menu_f2b)"
-        echo -e "  ${green}12.${reset} $(msg menu_jail)"
-        echo -e "  ${green}13.${reset} $(msg menu_ssh)"
-        echo -e "  ${green}14.${reset} $(msg menu_ufw)"
-        echo -e "  ${green}15.${reset} $(msg menu_ipv6)"
-        echo -e "  ${green}16.${reset} $(msg menu_cpuguard)"
-        echo -e "  ${green}17.${reset} $(msg menu_adblock)"
+        echo -e "  ${green}11.${reset} $(msg menu_bbr)"
+        echo -e "  ${green}12.${reset} $(msg menu_f2b)"
+        echo -e "  ${green}13.${reset} $(msg menu_jail)"
+        echo -e "  ${green}14.${reset} $(msg menu_ssh)"
+        echo -e "  ${green}15.${reset} $(msg menu_ufw)"
+        echo -e "  ${green}16.${reset} $(msg menu_ipv6)"
+        echo -e "  ${green}17.${reset} $(msg menu_cpuguard)"
+        echo -e "  ${green}18.${reset} $(msg menu_adblock)"
         echo -e "  $(msg menu_sep_logs)"
-        echo -e "  ${green}18.${reset} $(msg menu_xray_acc)"
-        echo -e "  ${green}19.${reset} $(msg menu_xray_err)"
-        echo -e "  ${green}20.${reset} $(msg menu_nginx_acc)"
-        echo -e "  ${green}21.${reset} $(msg menu_nginx_err)"
-        echo -e "  ${green}22.${reset} $(msg menu_clear_logs)"
-        echo -e "  ${green}23.${reset} $(msg menu_privacy)"
+        echo -e "  ${green}19.${reset} $(msg menu_xray_acc)"
+        echo -e "  ${green}20.${reset} $(msg menu_xray_err)"
+        echo -e "  ${green}21.${reset} $(msg menu_nginx_acc)"
+        echo -e "  ${green}22.${reset} $(msg menu_nginx_err)"
+        echo -e "  ${green}23.${reset} $(msg menu_clear_logs)"
+        echo -e "  ${green}24.${reset} $(msg menu_privacy)"
         echo -e "  $(msg menu_sep_svc)"
-        echo -e "  ${green}24.${reset} $(msg menu_restart)"
-        echo -e "  ${green}25.${reset} $(msg menu_update_xray)"
-        echo -e "  ${green}26.${reset} $(msg menu_rebuild_all)"
-        echo -e "  ${green}27.${reset} $(msg menu_diag)"
-        echo -e "  ${green}28.${reset} $(msg menu_backup)"
-        echo -e "  ${green}29.${reset} $(msg menu_lang)"
-        echo -e "  ${green}30.${reset} $(msg menu_remove)"
+        echo -e "  ${green}25.${reset} $(msg menu_restart)"
+        echo -e "  ${green}26.${reset} $(msg menu_update_xray)"
+        echo -e "  ${green}27.${reset} $(msg menu_rebuild_all)"
+        echo -e "  ${green}28.${reset} $(msg menu_diag)"
+        echo -e "  ${green}29.${reset} $(msg menu_backup)"
+        echo -e "  ${green}30.${reset} $(msg menu_lang)"
+        echo -e "  ${green}31.${reset} $(msg menu_remove)"
         echo -e "  $(msg menu_sep_exit)"
         echo -e "  ${green}0.${reset}  $(msg menu_exit)"
         echo -e "${cyan}----------------------------------------------------------------${reset}"
@@ -436,32 +439,33 @@ menu() {
             3)  manageWs ;;
             4)  manageReality ;;
             5)  manageVision ;;
-            6)  manageWarp ;;
-            7)  manageRelay ;;
-            8)  managePsiphon ;;
-            9)  manageTor ;;
-            10) enableBBR ;;
-            11) manageFail2Ban ;;
-            12) manageWebJail ;;
-            13) changeSshPort ;;
-            14) manageUFW ;;
-            15) toggleIPv6 ;;
-            16) setupCpuGuard ;;
-            17) manageAdblock ;;
-            18) tail -n 80 /var/log/xray/access.log 2>/dev/null || echo "$(msg no_logs)" ;;
-            19) tail -n 80 /var/log/xray/error.log 2>/dev/null || echo "$(msg no_logs)" ;;
-            20) tail -n 80 /var/log/nginx/access.log 2>/dev/null || echo "$(msg no_logs)" ;;
-            21) tail -n 80 /var/log/nginx/error.log 2>/dev/null || echo "$(msg no_logs)" ;;
-            22) clearLogs ;;
-            23) managePrivacy ;;
-            24) systemctl restart xray xray-reality xray-vision nginx warp-svc psiphon tor 2>/dev/null || true
+            6)  manageXhttp ;;
+            7)  manageWarp ;;
+            8)  manageRelay ;;
+            9)  managePsiphon ;;
+            10) manageTor ;;
+            11) enableBBR ;;
+            12) manageFail2Ban ;;
+            13) manageWebJail ;;
+            14) changeSshPort ;;
+            15) manageUFW ;;
+            16) toggleIPv6 ;;
+            17) setupCpuGuard ;;
+            18) manageAdblock ;;
+            19) tail -n 80 /var/log/xray/access.log 2>/dev/null || echo "$(msg no_logs)" ;;
+            20) tail -n 80 /var/log/xray/error.log 2>/dev/null || echo "$(msg no_logs)" ;;
+            21) tail -n 80 /var/log/nginx/access.log 2>/dev/null || echo "$(msg no_logs)" ;;
+            22) tail -n 80 /var/log/nginx/error.log 2>/dev/null || echo "$(msg no_logs)" ;;
+            23) clearLogs ;;
+            24) managePrivacy ;;
+            25) systemctl restart xray xray-reality xray-vision xray-xhttp nginx warp-svc psiphon tor 2>/dev/null || true
                 echo "${green}$(msg all_services_restarted)${reset}" ;;
-            25) updateXrayCore ;;
-            26) rebuildAllConfigs ;;
-            27) manageDiag ;;
-            28) manageBackup ;;
-            29) selectLang; _initLang ;;
-            30) fullRemove ;;
+            26) updateXrayCore ;;
+            27) rebuildAllConfigs ;;
+            28) manageDiag ;;
+            29) manageBackup ;;
+            30) selectLang; _initLang ;;
+            31) fullRemove ;;
             0)  exit 0 ;;
             *)  echo -e "${red}$(msg invalid)${reset}"; sleep 1 ;;
         esac

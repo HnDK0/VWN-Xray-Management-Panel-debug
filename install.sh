@@ -952,6 +952,10 @@ _auto_ssl() {
             --fullchain-file /etc/nginx/cert/cert.pem \
             --reloadcmd      "systemctl restart nginx 2>/dev/null || true"
 
+    # Даём пользователю xray доступ к cert.key — нужно для xray-vision
+    chmod 640 /etc/nginx/cert/cert.key
+    chown root:xray /etc/nginx/cert/cert.key 2>/dev/null || true
+
     ok "SSL для ${domain} получен"
 }
 

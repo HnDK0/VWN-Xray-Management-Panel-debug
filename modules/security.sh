@@ -3,41 +3,7 @@
 # security.sh — UFW, BBR, Fail2Ban, WebJail, SSH
 # =================================================================
 
-# Автоматически определяет доступный бэкенд фаервола для Fail2Ban
-# Возвращает подходящий banaction: nftables-multiport / iptables-multiport
-detectFirewallBackend() {
-    # Ubuntu 22.04+: iptables является обёрткой над nftables (iptables-nft).
-    # Fail2ban с banaction=nftables-multiport работает только если есть inet-таблица.
-    # UFW создаёт таблицы типа 'ip'/'ip6', а не 'inet' — поэтому проверяем точнее.
 
-    # Проверяем есть ли nft И можем ли создать inet таблицу (= реальный nftables режим)
-    if command -v nft &>/dev/null; then
-        # Проверяем реальный nftables: смотрим есть ли уже inet таблица fail2ban
-        # или пробуем создать тестовую — если нет UFW-конфликта
-        if nft list tables 2>/dev/null | grep -qE '^(inet|table inet)'; then
-            echo "nftables-multiport"
-            return
-        fi
-        # UFW активен и использует nftables под капотом — используем nftables-allports
-        # который работает корректно поверх UFW на Ubuntu 22.04
-        if systemctl is-active --quiet ufw 2>/dev/null || ufw status 2>/dev/null | grep -q "Status: active"; then
-            echo "nftables-allports"
-            return
-        fi
-        # nft есть, UFW не активен — стандартный nftables-multiport
-        echo "nftables-multiport"
-        return
-    fi
-
-    # Фоллбек на iptables если nft недоступен
-    if command -v iptables &>/dev/null; then
-        echo "iptables-multiport"
-        return
-    fi
-
-    # Последний резерв — fail2ban сам выберет через auto-detection
-    echo "%(banaction_allports)s"
-}
 
 changeSshPort() {
     read -rp "$(msg ssh_new_port)" new_ssh_port
@@ -66,8 +32,9 @@ changeSshPort() {
         # Откат на старый порт
         sed -i "s/^#\?Port [0-9]*/Port $old_ssh_port/" /etc/ssh/sshd_config
         systemctl restart sshd 2>/dev/null || systemctl restart ssh
-        # Закрываем новый порт в фаерволе
+        # Закрываем новый порт и возвращаем старый в фаерволе
         ufw delete allow "$new_ssh_port"/tcp &>/dev/null
+        ufw allow "$old_ssh_port"/tcp comment 'SSH' &>/dev/null
         echo "${yellow}Rolled back to old port $old_ssh_port${reset}"
         return 1
     fi
@@ -100,10 +67,7 @@ changeSshPort() {
             cf_ips=$(curl -fsSL --connect-timeout 5 "https://www.cloudflare.com/ips-v4" 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')
         fi
 
-        # Определяем актуальный бэкенд
-        local ban_action
-        ban_action=$(detectFirewallBackend)
-        [ -z "$ban_action" ] && ban_action="%(banaction_allports)s"
+        local ban_action="iptables-multiport"
 
         # Перезаписываем jail.local с сохранением [nginx-probe] если есть
         python3 - "$new_ssh_port" "$sshd_backend" "$sshd_logpath" "$cf_ips" "$ban_action" << 'PEOF'
@@ -186,15 +150,10 @@ setupFail2Ban() {
     echo -e "${cyan}$(msg f2b_setup)${reset}"
     [ -z "${PACKAGE_MANAGEMENT_INSTALL:-}" ] && identifyOS
 
-    # Определяем доступный бэкенд фаервола
-    local ban_action
-    ban_action=$(detectFirewallBackend)
-    # Защита от пустой строки — fail2ban не стартует с пустым banaction
-    [ -z "$ban_action" ] && ban_action="%(banaction_allports)s"
-
-    # timeout 120 — защита от зависания post-install скрипта (update-motd-updates-available)
-    timeout 120 ${PACKAGE_MANAGEMENT_INSTALL} "fail2ban" &>/dev/null || true
+    ${PACKAGE_MANAGEMENT_INSTALL} "fail2ban"
     mkdir -p /etc/fail2ban
+
+    local ban_action="iptables-multiport"
 
     local ssh_port
     ssh_port=$(grep -E "^Port " /etc/ssh/sshd_config | awk '{print $2}' | head -1)
@@ -254,7 +213,7 @@ EOF
     fi
 
     systemctl enable fail2ban 2>/dev/null
-    echo "${green}$(msg f2b_ok) $ssh_port).${reset}"
+    echo "${green}$(msg f2b_ok) $ssh_port.${reset}"
 }
 
 removeFail2Ban() {
@@ -366,9 +325,8 @@ rebuildFail2BanConfigs() {
         cf_ips=$(curl -fsSL --connect-timeout 5 "https://www.cloudflare.com/ips-v4" 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')
     fi
 
-    # Используем сохранённый banaction или определяем автоматически
-    local ban_action="${old_banaction:-$(detectFirewallBackend)}"
-    [ -z "$ban_action" ] && ban_action="%(banaction_allports)s"
+    # Используем сохранённый banaction или iptables-multiport
+    local ban_action="${old_banaction:-iptables-multiport}"
 
     cat > /etc/fail2ban/jail.local << EOF
 [DEFAULT]

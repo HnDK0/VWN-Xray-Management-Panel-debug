@@ -118,7 +118,7 @@ buildUserSubFile() {
     server_ip=$(getServerIP)
     flag=$(_getCountryFlag "$server_ip")
 
-    if [ -f "$configPath" ] && [ -n "$domain" ]; then
+    if [ -f "$configPath" ] && [ -n "$domain" ] && [ ! -f "$visionConfigPath" ]; then
         local wp wep name encoded_name connect_host
         wp=$(jq -r '.inbounds[0].streamSettings.wsSettings.path // .inbounds[0].streamSettings.xhttpSettings.path // ""' "$configPath" 2>/dev/null)
         wep=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1],safe='/'))" "$wp" 2>/dev/null || echo "$wp")
@@ -138,12 +138,7 @@ buildUserSubFile() {
             "$realityConfigPath" 2>/dev/null | head -1)
         [ -z "$r_uuid" ] && \
             r_uuid=$(jq -r '.inbounds[0].settings.clients[0].id' "$realityConfigPath" 2>/dev/null)
-        # Если stream SNI активен — Reality снаружи доступен на 443, а не на внутреннем порту
-        if grep -q "ssl_preread on" /etc/nginx/nginx.conf 2>/dev/null; then
-            r_port=443
-        else
-            r_port=$(jq -r '.inbounds[0].port' "$realityConfigPath" 2>/dev/null)
-        fi
+        r_port=$(jq -r '.inbounds[0].port' "$realityConfigPath" 2>/dev/null)
         r_shortId=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$realityConfigPath" 2>/dev/null)
         r_destHost=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0]' "$realityConfigPath" 2>/dev/null)
         r_pubKey=$(vwn_conf_get REALITY_PUBKEY 2>/dev/null)
@@ -155,7 +150,7 @@ buildUserSubFile() {
 
     if [ -f "$visionConfigPath" ]; then
         local v_domain v_uuid v_name v_encoded_name
-        v_domain=$(vwn_conf_get VISION_DOMAIN 2>/dev/null || true)
+        v_domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
         v_uuid=$(jq -r --arg u "$uuid" \
             '.inbounds[0].settings.clients[] | select(.id==$u) | .id' \
             "$visionConfigPath" 2>/dev/null | head -1)
@@ -165,6 +160,19 @@ buildUserSubFile() {
             v_name=$(_getConfigName "Vision" "$label" "$server_ip")
             v_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$v_name" 2>/dev/null || echo "$v_name")
             lines+="vless://${v_uuid}@${v_domain}:443?security=tls&flow=xtls-rprx-vision&type=tcp&sni=${v_domain}&fp=chrome&allowInsecure=0#${v_encoded_name}"$'\n'
+        fi
+    fi
+
+    if [ -f "$xhttpConfigPath" ]; then
+        local x_domain x_uuid x_path x_enc_path x_name x_encoded_name
+        x_domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
+        x_uuid=$(vwn_conf_get VISION_UUID 2>/dev/null || true)
+        x_path=$(vwn_conf_get XHTTP_PATH 2>/dev/null || true)
+        if [ -n "$x_domain" ] && [ -n "$x_uuid" ] && [ -n "$x_path" ]; then
+            x_enc_path=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1],safe='/'))" "$x_path" 2>/dev/null || echo "$x_path")
+            x_name=$(_getConfigName "XHTTP" "$label" "$server_ip")
+            x_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$x_name" 2>/dev/null || echo "$x_name")
+            lines+="vless://${x_uuid}@${x_domain}:443?security=tls&type=xhttp&path=${x_enc_path}&sni=${x_domain}&fp=chrome&allowInsecure=0#${x_encoded_name}"$'\n'
         fi
     fi
 

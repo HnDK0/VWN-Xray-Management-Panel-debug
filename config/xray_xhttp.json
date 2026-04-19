@@ -24,7 +24,7 @@
             "network": "xhttp",
             "security": "none",
             "xhttpSettings": {
-                "path": "/__PATH__",
+                "path": "__PATH__",
                 "mode": "stream-one",
                 "headers": {
                     "Host": "__DOMAIN__"

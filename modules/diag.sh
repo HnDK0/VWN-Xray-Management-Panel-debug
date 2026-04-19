@@ -122,11 +122,7 @@ _diagXray() {
         local reality_port
         reality_port=$(jq -r '.inbounds[0].port' "$realityConfigPath" 2>/dev/null)
         if ss -tlnp 2>/dev/null | grep -q ":${reality_port}"; then
-            if grep -q "ssl_preread on" /etc/nginx/nginx.conf 2>/dev/null; then
-                _pass "$(msg diag_port_listen): ${reality_port} (internal) → 443 (external via SNI)"
-            else
-                _pass "$(msg diag_port_listen): $reality_port"
-            fi
+            _pass "$(msg diag_port_listen): $reality_port"
         else
             _fail "$(msg diag_port_not_listen): $reality_port"
         fi
@@ -320,7 +316,7 @@ _diagFail2Ban() {
 
             # Проверка что maxretry не слишком низкий
             if [ "${max_retry:-5}" -lt 10 ] 2>/dev/null; then
-                _warn "nginx-probe maxretry=$max_retry — may cause false bans with Stream SNI"
+                _warn "nginx-probe maxretry=$max_retry — consider increasing to 10+"
             fi
         else
             _warn "nginx-probe filter exists but jail not active"

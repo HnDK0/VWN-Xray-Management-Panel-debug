@@ -510,8 +510,7 @@ enabled  = true
 port     = http,https
 filter   = nginx-probe
 logpath  = /var/log/nginx/access.log
-# Важно: 15 попыток за 5 минут — только агрессивные сканеры попадают под бан
-# При Stream SNI легитимный трафик (неизвестные SNI → default backend) не банится
+# 15 попыток за 5 минут — только агрессивные сканеры попадают под бан
 maxretry = 15
 findtime = 5m
 bantime  = 24h

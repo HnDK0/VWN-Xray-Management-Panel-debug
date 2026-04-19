@@ -156,23 +156,6 @@ installVision() {
         return 1
     fi
 
-    # 2. Stream SNI и Vision несовместимы — отключаем Stream если активен
-    if grep -q "ssl_preread on" /etc/nginx/nginx.conf 2>/dev/null; then
-        echo "${yellow}Stream SNI активен. Vision не может работать одновременно с Stream.${reset}"
-        if $auto_mode; then
-            echo -e "${cyan}Автоматически отключаю Stream SNI...${reset}"
-            _doDisableStreamSNI || { echo "${red}Stream SNI disable failed.${reset}"; return 1; }
-        else
-            echo -e "${yellow}Отключить Stream SNI автоматически? $(msg yes_no)${reset}"
-            read -r _disable_sni
-            if [[ "$_disable_sni" == "y" ]]; then
-                _doDisableStreamSNI || { echo "${red}Stream SNI disable failed.${reset}"; return 1; }
-            else
-                echo "${red}$(msg cancel)${reset}"
-                return 1
-            fi
-        fi
-    fi
 
     # 3. Проверяем что порт 443 свободен
     local _port443_proc
@@ -205,11 +188,23 @@ installVision() {
     proxy_url=$(vwn_conf_get STUB_URL 2>/dev/null || echo "https://www.bing.com/")
     writeNginxConfigVision "$proxy_url" "$vision_domain"
 
-    # 8. Сервис
-    setupVisionService || return 1
+    # 8. Освобождаем порт 443: останавливаем nginx до старта xray-vision
+    systemctl stop nginx 2>/dev/null || true
+    sleep 1
+
+    # 9. Сервис
+    if ! setupVisionService; then
+        # Если xray-vision не стартовал — возвращаем nginx обратно
+        systemctl start nginx 2>/dev/null || true
+        return 1
+    fi
+
+    # 10. Запускаем nginx на 7443 (fallback для xray-vision)
+    systemctl start nginx 2>/dev/null || true
 
     # 9. Сохраняем мета-данные
-    vwn_conf_set VISION_UUID      "$uuid"
+    vwn_conf_set VISION_UUID   "$uuid"
+    vwn_conf_set VISION_DOMAIN "$vision_domain"
 
     # 10. Применяем активные фичи
     _visionApplyActiveFeatures
@@ -387,6 +382,7 @@ removeVision() {
     rm -f "$visionConfigPath"
 
     vwn_conf_del VISION_UUID
+    vwn_conf_del VISION_DOMAIN
 
     # Пересобираем Nginx — вернёт на base режим (Nginx на 443)
     local ws_domain ws_port proxy_url ws_path
@@ -399,6 +395,7 @@ removeVision() {
     nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || true
 
     echo "${green}$(msg vision_removed)${reset}"
+    rebuildAllSubFiles 2>/dev/null || true
 }
 
 # ── Пересоздание конфигов без переустановки ──────────────────────

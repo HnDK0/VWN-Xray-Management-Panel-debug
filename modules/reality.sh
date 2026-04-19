@@ -225,7 +225,6 @@ installReality() {
     writeRealityConfig "$realityPort" "$dest" || return 1
     setupRealityService || return 1
 
-    # Сохраняем порт Reality в vwn.conf для последующего rollback при отключении Stream SNI
     vwn_conf_set REALITY_PORT "$realityPort"
 
     # Синхронизируем WARP и Relay домены в новый конфиг
@@ -262,12 +261,7 @@ showRealityInfo() {
     pubKey=$(vwn_conf_get REALITY_PUBKEY 2>/dev/null)
     [ -z "$pubKey" ] && pubKey=$(grep "PublicKey:" /usr/local/etc/xray/reality_client.txt 2>/dev/null | awk '{print $2}')
 
-    # Если stream SNI активен — снаружи Reality доступен на 443
-    if grep -q "ssl_preread on" /etc/nginx/nginx.conf 2>/dev/null; then
-        port=443
-    else
-        port=$(jq -r '.inbounds[0].port' "$realityConfigPath")
-    fi
+    port=$(jq -r '.inbounds[0].port' "$realityConfigPath")
 
     echo "UUID:        $uuid"
     echo "IP:          $serverIP"
@@ -298,12 +292,7 @@ showRealityQR() {
     [ -z "$pubKey" ] && pubKey=$(grep "PublicKey:" /usr/local/etc/xray/reality_client.txt 2>/dev/null | awk '{print $2}')
     serverIP=$(_getPublicIP)
 
-    # Если stream SNI активен — снаружи Reality доступен на 443
-    if grep -q "ssl_preread on" /etc/nginx/nginx.conf 2>/dev/null; then
-        port=443
-    else
-        port=$(jq -r '.inbounds[0].port' "$realityConfigPath")
-    fi
+    port=$(jq -r '.inbounds[0].port' "$realityConfigPath")
 
     local r_label r_name r_encoded_name
     r_label="default"
@@ -324,15 +313,6 @@ modifyRealityUUID() {
 
 modifyRealityPort() {
     [ ! -f "$realityConfigPath" ] && { echo "${red}$(msg reality_not_installed)${reset}"; return 1; }
-
-    # Если stream SNI активен — внутренний порт управляется через setupStreamSNI
-    if grep -q "ssl_preread on" /etc/nginx/nginx.conf 2>/dev/null; then
-        local internal_port
-        internal_port=$(jq -r '.inbounds[0].port' "$realityConfigPath")
-        echo "${yellow}Stream SNI активен. Reality снаружи работает на порту 443.${reset}"
-        echo "${yellow}$(msg stream_sni_change_in_main_menu): ${internal_port}${reset}"
-        return 0
-    fi
 
     local oldPort
     oldPort=$(jq '.inbounds[0].port' "$realityConfigPath")
@@ -379,19 +359,13 @@ removeReality() {
     echo -e "${red}$(msg reality_remove_confirm) $(msg yes_no)${reset}"
     read -r confirm
     if [[ "$confirm" == "y" ]]; then
-        # Если активен Stream SNI — сначала откатываем nginx
-        # иначе после удаления Reality порт 443 перестанет работать для WS
-        if grep -q "ssl_preread on" /etc/nginx/nginx.conf 2>/dev/null; then
-            echo -e "${cyan}$(msg stream_sni_disabling)${reset}"
-            # Передаём confirm=y напрямую чтобы не спрашивать повторно
-            _doDisableStreamSNI
-        fi
         systemctl stop xray-reality 2>/dev/null || true
         systemctl disable xray-reality 2>/dev/null || true
         rm -f /etc/systemd/system/xray-reality.service
         rm -f "$realityConfigPath" /usr/local/etc/xray/reality_client.txt
         systemctl daemon-reload
         echo "${green}$(msg removed)${reset}"
+        rebuildAllSubFiles 2>/dev/null || true
     fi
 }
 
@@ -417,14 +391,6 @@ rebuildRealityConfigs() {
     echo -e "  ${cyan}[1/2] reality.json...${reset}"
     writeRealityConfig "$realityPort" "$dest"
 
-    # Если Stream SNI активен — nginx делает ssl_preread и проксирует внутрь,
-    # поэтому Reality должен слушать 127.0.0.1, а не 0.0.0.0
-    if grep -q "ssl_preread on" /etc/nginx/nginx.conf 2>/dev/null; then
-        jq '.inbounds[0].listen = "127.0.0.1"' \
-            "$realityConfigPath" > "${realityConfigPath}.tmp" \
-            && mv "${realityConfigPath}.tmp" "$realityConfigPath"
-    fi
-
     echo -e "  ${cyan}[2/2] Applying active features...${reset}"
     [ -f "$warpDomainsFile" ] && applyWarpDomains 2>/dev/null || true
     [ -f "$relayConfigFile" ] && applyRelayDomains 2>/dev/null || true
@@ -448,7 +414,6 @@ manageReality() {
         s_reality=$(getServiceStatus xray-reality)
         s_warp=$(getWarpStatus)
         s_port=$(jq -r '.inbounds[0].port // "—"' "$realityConfigPath" 2>/dev/null)
-        grep -q "ssl_preread on" /etc/nginx/nginx.conf 2>/dev/null && s_port="443 (SNI→${s_port})"
         s_dest=$(jq -r '.inbounds[0].streamSettings.realitySettings.dest // "—"' "$realityConfigPath" 2>/dev/null)
         echo -e "${cyan}================================================================${reset}"
         printf "   ${red}VLESS + Reality${reset}  %s\n" "$(date +'%d.%m.%Y %H:%M')"

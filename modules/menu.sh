@@ -425,7 +425,6 @@ menu() {
         echo -e "  ${green}28.${reset} $(msg menu_backup)"
         echo -e "  ${green}29.${reset} $(msg menu_lang)"
         echo -e "  ${green}30.${reset} $(msg menu_remove)"
-        echo -e "  ${green}31.${reset} $(msg menu_stream_sni_manage)"
         echo -e "  $(msg menu_sep_exit)"
         echo -e "  ${green}0.${reset}  $(msg menu_exit)"
         echo -e "${cyan}----------------------------------------------------------------${reset}"
@@ -463,7 +462,6 @@ menu() {
             28) manageBackup ;;
             29) selectLang; _initLang ;;
             30) fullRemove ;;
-            31) manageStreamSNI ;;
             0)  exit 0 ;;
             *)  echo -e "${red}$(msg invalid)${reset}"; sleep 1 ;;
         esac

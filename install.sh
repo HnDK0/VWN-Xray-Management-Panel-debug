@@ -54,7 +54,7 @@ export LOG_FILE VWN_LIB VWN_BIN VWN_CONF VWN_CONFIG_DIR
 # Причина не использовать строки: IFS=$'\n\t' (если бы был) ломает
 # итерацию; массивы работают корректно при любом IFS.
 VWN_MODULES=(lang core xray nginx warp reality relay psiphon tor security logs backup users diag privacy adblock vision xhttp menu)
-VWN_CONFIGS=(nginx_main.conf nginx_base.conf nginx_vision.conf nginx_stream.conf nginx_stream_ws.conf nginx_default.conf sub_map.conf xray_ws.json xray_vision.json xray_reality.json xray_xhttp.json xray-vision.service)
+VWN_CONFIGS=(nginx_main.conf nginx_base.conf nginx_vision.conf nginx_default.conf sub_map.conf xray_ws.json xray_vision.json xray_reality.json xray_xhttp.json xray-vision.service)
 
 # Временные файлы — удаляются через trap
 _TMPFILES=()
@@ -115,9 +115,25 @@ die()   { err "ОШИБКА: $*"; exit 1; }
 # используют свой run_task() с другим форматом — это ОК, они
 # работают в своём контексте (интерактивное меню).
 # -----------------------------------------------------------------
+
+# Печатает строку с выравниванием до col символов, учитывая UTF-8
+_print_padded() {
+    local text="$1" col="${2:-52}"
+    local vis_len
+    vis_len=$(python3 -c "
+import sys, unicodedata
+s = sys.argv[1]
+w = sum(2 if unicodedata.east_asian_width(c) in ('W','F') else 1 for c in s)
+print(w)
+" "$text" 2>/dev/null) || vis_len=${#text}
+    printf "  %s" "$text"
+    local pad=$(( col - vis_len ))
+    [ "$pad" -gt 0 ] && printf '%*s' "$pad" ''
+}
+
 step() {
     local desc="$1"; shift
-    printf "  %-52s" "$desc"
+    _print_padded "$desc"
     log_info "STEP: ${desc}"
 
     local output rc=0
@@ -136,7 +152,7 @@ step() {
 # Non-fatal вариант — SKIP вместо FAIL
 soft_step() {
     local desc="$1"; shift
-    printf "  %-52s" "$desc"
+    _print_padded "$desc"
     log_info "SOFT: ${desc}"
 
     if "$@" &>/dev/null; then
@@ -699,7 +715,6 @@ OPT_BBR=false
 OPT_FAIL2BAN=false
 OPT_NO_WARP=false
 OPT_VISION=false
-OPT_STREAM=false
 OPT_SSH_PORT=""
 OPT_JAIL=false
 OPT_IPV6=false
@@ -729,7 +744,6 @@ _parse_args() {
             --bbr)             OPT_BBR=true ;;
             --fail2ban)        OPT_FAIL2BAN=true ;;
             --no-warp)         OPT_NO_WARP=true ;;
-            --stream)          OPT_STREAM=true ;;
             --vision)          OPT_VISION=true ;;
             --ssh-port)        OPT_SSH_PORT="${2:?'--ssh-port требует значение'}";     shift ;;
             --jail)            OPT_JAIL=true ;;
@@ -783,7 +797,6 @@ VWN Installer v2.1  (Xray VLESS + WARP + CDN + Reality)
   --psiphon-country КОД      Страна выхода Psiphon (DE, NL, US...)
   --psiphon-warp             Psiphon через WARP
   --no-warp                  Не настраивать Cloudflare WARP
-  --stream                   Stream SNI (несовместим с --vision)
   --vision                   Vision/TLS на порту 443 напрямую
 
 ПРИМЕРЫ:
@@ -818,7 +831,6 @@ _validate_auto_params() {
     }
 
     $OPT_VISION && $OPT_SKIP_WS && die "--vision несовместим с --skip-ws"
-    $OPT_VISION && $OPT_STREAM  && die "--vision и --stream взаимоисключающие"
 
     [[ "$OPT_CERT_METHOD" != "cf" && "$OPT_CERT_METHOD" != "standalone" ]] \
         && die "--cert-method: допустимо 'cf' или 'standalone'"
@@ -853,7 +865,6 @@ _print_auto_params() {
     $OPT_SKIP_WS && mode="Reality only (WS пропущен)" || mode="WS+TLS+CDN"
     $OPT_REALITY && mode+=" + Reality"
     $OPT_VISION  && mode+=" + Vision"
-    $OPT_STREAM && ! $OPT_VISION && mode+=" + Stream SNI"
 
     echo ""
     echo -e "${CYAN}$(printf '─%.0s' {1..64})${RESET}"
@@ -871,7 +882,6 @@ _print_auto_params() {
     ! $OPT_SKIP_WS                 && _print_param "SSL метод"   "$OPT_CERT_METHOD"
     $OPT_REALITY                   && _print_param "Reality"     "${OPT_REALITY_DEST}  порт=${OPT_REALITY_PORT}"
     $OPT_VISION                    && _print_param "Vision"      "$OPT_DOMAIN"
-    $OPT_STREAM && ! $OPT_VISION   && _print_param "Stream SNI"  "включён"
     [[ -n "$OPT_SSH_PORT" ]]       && _print_param "SSH порт"   "$OPT_SSH_PORT"
     $OPT_IPV6                      && _print_param "IPv6"        "включён"
     $OPT_CPU_GUARD                 && _print_param "CPU Guard"   "включён"
@@ -1024,12 +1034,6 @@ _auto_install_reality() {
 _auto_install_vision() {
     section "Vision"
 
-    # Конфликт со Stream SNI — отключаем (_doDisableStreamSNI из modules/nginx.sh)
-    if grep -q "ssl_preread on" /etc/nginx/nginx.conf 2>/dev/null; then
-        info "Stream SNI активен — отключаем (несовместим с Vision)"
-        step "Отключение Stream SNI" _doDisableStreamSNI
-    fi
-
     # installVision — из modules/vision.sh
     step "Установка Vision" installVision --auto
     ok "Vision: домен=${OPT_DOMAIN}"
@@ -1103,7 +1107,7 @@ _auto_toggle_ipv6_on() {
 # -----------------------------------------------------------------
 # ГЛАВНАЯ ФУНКЦИЯ АВТОМАТИЧЕСКОЙ УСТАНОВКИ
 # Порядок: validate → print → load_modules → systemные пакеты →
-#          WS → Reality → Stream → Vision → опциональные
+#          WS → Reality → Vision → опциональные
 # -----------------------------------------------------------------
 _run_auto() {
     echo -e "${CYAN}$(printf '═%.0s' {1..64})${RESET}"
@@ -1176,13 +1180,6 @@ _run_auto() {
 
     # ── Reality ───────────────────────────────────────────────────
     $OPT_REALITY && _auto_install_reality
-
-    # ── Stream SNI ────────────────────────────────────────────────
-    if $OPT_STREAM && ! $OPT_VISION; then
-        section "Stream SNI"
-        # setupStreamSNI — из modules/nginx.sh
-        soft_step "Stream SNI" setupStreamSNI 7443 10443
-    fi
 
     # ── Vision ────────────────────────────────────────────────────
     if $OPT_VISION; then

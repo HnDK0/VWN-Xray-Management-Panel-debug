@@ -20,7 +20,7 @@ _adblockCount() {
         select(.outboundTag == "block") |
         (.domain // [])[] |
         select(. == "geosite:category-ads-all")
-    ] | length' "$cfg" 2>/dev/null
+    ] | length' "$cfg"
 }
 
 # ── Статус ────────────────────────────────────────────────────────
@@ -97,9 +97,9 @@ enableAdblock() {
         return 1
     fi
 
-    systemctl restart xray 2>/dev/null || true
-    systemctl restart xray-reality 2>/dev/null || true
-    systemctl restart xray-vision 2>/dev/null || true
+    systemctl restart xray || true
+    systemctl restart xray-reality || true
+    systemctl restart xray-vision || true
 
     vwn_conf_set adblock_enabled 1
     echo "${green}$(msg adblock_enabled)${reset}"
@@ -115,9 +115,9 @@ disableAdblock() {
         _adblockRemoveFromConfig "$cfg"
     done
 
-    systemctl restart xray 2>/dev/null || true
-    systemctl restart xray-reality 2>/dev/null || true
-    systemctl restart xray-vision 2>/dev/null || true
+    systemctl restart xray || true
+    systemctl restart xray-reality || true
+    systemctl restart xray-vision || true
 
     vwn_conf_set adblock_enabled 0
     echo "${green}$(msg adblock_disabled)${reset}"

@@ -65,12 +65,12 @@ _TMPFILES=()
 
 # ── bootstrap.sh ─────────────────────────────────────────────────
 _bootstrap_init_colors() {
-    if [[ -t 1 ]] && command -v tput &>/dev/null; then
-        RED=$(tput setaf 1 2>/dev/null; tput bold 2>/dev/null) || RED=''
-        GREEN=$(tput setaf 2 2>/dev/null; tput bold 2>/dev/null) || GREEN=''
-        YELLOW=$(tput setaf 3 2>/dev/null; tput bold 2>/dev/null) || YELLOW=''
-        CYAN=$(tput setaf 6 2>/dev/null; tput bold 2>/dev/null) || CYAN=''
-        RESET=$(tput sgr0 2>/dev/null) || RESET=''
+    if [[ -t 1 ]] && command -v tput; then
+        RED=$(tput setaf 1; tput bold) || RED=''
+        GREEN=$(tput setaf 2; tput bold) || GREEN=''
+        YELLOW=$(tput setaf 3; tput bold) || YELLOW=''
+        CYAN=$(tput setaf 6; tput bold) || CYAN=''
+        RESET=$(tput sgr0) || RESET=''
     else
         RED='' GREEN='' YELLOW='' CYAN='' RESET=''
     fi
@@ -91,8 +91,8 @@ _bootstrap_init_colors
 # -----------------------------------------------------------------
 _log() {
     local level="$1"; shift
-    local ts; ts=$(date '+%H:%M:%S' 2>/dev/null || echo '??:??:??')
-    printf '[%s] [%-5s] %s\n' "$ts" "$level" "$*" >> "${LOG_FILE:-/var/log/vwn_install.log}" 2>/dev/null || true
+    local ts; ts=$(date '+%H:%M:%S' || echo '??:??:??')
+    printf '[%s] [%-5s] %s\n' "$ts" "$level" "$*" >> "${LOG_FILE:-/var/log/vwn_install.log}" || true
 }
 
 log_info()  { _log "INFO " "$@"; }
@@ -125,7 +125,7 @@ import sys, unicodedata
 s = sys.argv[1]
 w = sum(2 if unicodedata.east_asian_width(c) in ('W','F') else 1 for c in s)
 print(w)
-" "$text" 2>/dev/null) || vis_len=${#text}
+" "$text") || vis_len=${#text}
     printf "  %s" "$text"
     local pad=$(( col - vis_len ))
     [ "$pad" -gt 0 ] && printf '%*s' "$pad" ''
@@ -155,7 +155,7 @@ soft_step() {
     _print_padded "$desc"
     log_info "SOFT: ${desc}"
 
-    if "$@" &>/dev/null; then
+    if "$@"; then
         echo -e " ${GREEN}[OK]${RESET}"
         log_ok "  → OK"
     else
@@ -182,7 +182,7 @@ section() {
 # -----------------------------------------------------------------
 msg() {
     # Если lang.sh уже загружен и заполнил MSG[] — используем его
-    if declare -p MSG &>/dev/null 2>&1 && [[ -n "${MSG[${1:-}]+x}" ]]; then
+    if declare -p MSG 2>&1 && [[ -n "${MSG[${1:-}]+x}" ]]; then
         echo "${MSG[$1]}"
         return
     fi
@@ -234,11 +234,11 @@ check_root() {
 # НЕ устанавливает PACKAGE_MANAGEMENT_* — это делает modules/core.sh::identifyOS()
 # -----------------------------------------------------------------
 check_os() {
-    if command -v apt &>/dev/null; then
+    if command -v apt; then
         PKG_MGR="apt"
-    elif command -v dnf &>/dev/null; then
+    elif command -v dnf; then
         PKG_MGR="dnf"
-    elif command -v yum &>/dev/null; then
+    elif command -v yum; then
         PKG_MGR="yum"
     else
         die "Поддерживаются только системы с apt / dnf / yum"
@@ -266,7 +266,7 @@ check_internet() {
     local hosts=(1.1.1.1 8.8.8.8 github.com)
     for h in "${hosts[@]}"; do
         if curl -fsS --connect-timeout 5 --max-time 8 \
-                -o /dev/null "https://${h}" 2>/dev/null; then
+                -o /dev/null "https://${h}"; then
             ok=true; break
         fi
     done
@@ -280,7 +280,7 @@ check_internet() {
 check_repo_access() {
     local url="${VWN_GITHUB_RAW}/install.sh"
     if curl -fsS --connect-timeout 10 --max-time 15 \
-            -o /dev/null "$url" 2>/dev/null; then
+            -o /dev/null "$url"; then
         log_ok "GitHub: OK"
         return 0
     fi
@@ -302,21 +302,21 @@ run_preflight_checks() {
 
 # ── apt_mirrors.sh ───────────────────────────────────────────────
 _bootstrap_kill_apt() {
-    killall -9 apt apt-get dpkg dpkg-deb unattended-upgrades 2>/dev/null || true
+    killall -9 apt apt-get dpkg dpkg-deb unattended-upgrades || true
     fuser -kk /var/lib/dpkg/lock* /var/cache/apt/archives/lock \
-               /var/lib/apt/lists/lock* 2>/dev/null || true
+               /var/lib/apt/lists/lock* || true
     sleep 0.5
     rm -f /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend \
           /var/cache/apt/archives/lock /var/lib/apt/lists/lock*
     export DEBIAN_FRONTEND=noninteractive
-    dpkg --configure -a --force-confold --force-confdef 2>/dev/null || true
+    dpkg --configure -a --force-confold --force-confdef || true
 }
 
 _bootstrap_apt_update() {
     timeout 30 apt-get \
         -o Acquire::ForceIPv4=true \
         -o Acquire::http::Timeout=15 \
-        update -qq 2>/dev/null
+        update -qq
 }
 
 # -----------------------------------------------------------------
@@ -345,7 +345,7 @@ fix_apt_mirrors() {
         "http://ftp.debian.org/debian/"
     )
 
-    cp -a /etc/apt/sources.list /etc/apt/sources.list.vwn_backup 2>/dev/null || true
+    cp -a /etc/apt/sources.list /etc/apt/sources.list.vwn_backup || true
 
     local mirror
     for mirror in "${mirrors[@]}"; do
@@ -368,7 +368,7 @@ fix_apt_mirrors() {
     done
 
     # Откат на оригинал
-    mv /etc/apt/sources.list.vwn_backup /etc/apt/sources.list 2>/dev/null || true
+    mv /etc/apt/sources.list.vwn_backup /etc/apt/sources.list || true
     _bootstrap_kill_apt
     warn "APT: все зеркала недоступны, используем стандартный"
 }
@@ -384,7 +384,7 @@ _log_init() {
         echo "VWN Install Log v${VWN_INSTALLER_VERSION} — $(date '+%Y-%m-%d %H:%M:%S')"
         echo "PID: $$  Args: $*"
         printf '=%.0s' {1..64}; echo ""
-    } >> "$LOG_FILE" 2>/dev/null || true
+    } >> "$LOG_FILE" || true
 }
 
 # -----------------------------------------------------------------
@@ -392,20 +392,20 @@ _log_init() {
 # -----------------------------------------------------------------
 _cleanup() {
     local rc=${1:-$?}
-    stty sane 2>/dev/null || true
+    stty sane || true
 
     local f
     for f in "${_TMPFILES[@]+"${_TMPFILES[@]}"}"; do
-        rm -f "$f" 2>/dev/null || true
+        rm -f "$f" || true
     done
 
-    rm -f "$VWN_LOCK_FILE" 2>/dev/null || true
+    rm -f "$VWN_LOCK_FILE" || true
 
     # Удаляем tmp-конфиги если были созданы
-    find /usr/local/etc/xray /etc/nginx -name "*.tmp" -delete 2>/dev/null || true
+    find /usr/local/etc/xray /etc/nginx -name "*.tmp" -delete || true
 
     # Закрываем 80-й порт если был открыт для ACME
-    [[ -x "$VWN_BIN" ]] && "$VWN_BIN" close-80 2>/dev/null || true
+    [[ -x "$VWN_BIN" ]] && "$VWN_BIN" close-80 || true
 
     if (( rc != 0 )); then
         log_error "Установщик завершился с кодом $rc"
@@ -430,15 +430,15 @@ _mktmp() {
 # -----------------------------------------------------------------
 _acquire_lock() {
     if [[ -f "$VWN_LOCK_FILE" ]]; then
-        local pid; pid=$(cat "$VWN_LOCK_FILE" 2>/dev/null | tr -cd '0-9')
+        local pid; pid=$(cat "$VWN_LOCK_FILE" | tr -cd '0-9')
 
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+        if [[ -n "$pid" ]] && kill -0 "$pid"; then
             die "Другой экземпляр установщика уже запущен (PID $pid).
 Если процесс завис: kill -9 $pid && rm -f $VWN_LOCK_FILE"
         fi
 
         # Зависшая блокировка старше 1 минуты
-        if find "$VWN_LOCK_FILE" -mmin +1 2>/dev/null | grep -q .; then
+        if find "$VWN_LOCK_FILE" -mmin +1 | grep -q .; then
             log_warn "Удаляем зависшую блокировку (>1 мин)"
             rm -f "$VWN_LOCK_FILE"
         fi
@@ -484,7 +484,7 @@ _download_file() {
     local tmp; tmp=$(_mktmp)
 
     if curl -fsSL --connect-timeout 15 --max-time 30 \
-            "$url" -o "$tmp" 2>/dev/null; then
+            "$url" -o "$tmp"; then
         mv "$tmp" "$dest"
         chmod 644 "$dest"
         return 0
@@ -494,7 +494,7 @@ _download_file() {
 }
 
 _file_hash() {
-    md5sum "$1" 2>/dev/null | awk '{print $1}'
+    md5sum "$1" | awk '{print $1}'
 }
 
 # -----------------------------------------------------------------
@@ -520,7 +520,7 @@ download_modules() {
                 echo -e " ${YELLOW}[SAME]${RESET}"
                 (( unchanged++ )) || true
             else
-                local ts; ts=$(stat -c '%y' "$dest" 2>/dev/null | cut -d. -f1)
+                local ts; ts=$(stat -c '%y' "$dest" | cut -d. -f1)
                 echo -e " ${GREEN}[UPDATED]${RESET} ${ts}"
                 log_ok "Модуль обновлён: $module"
                 (( updated++ )) || true
@@ -600,14 +600,14 @@ _write_fallback_vwn() {
 VWN_LIB="/usr/local/lib/vwn"
 case "${1:-}" in
     "open-80")
-        ufw status 2>/dev/null | grep -q inactive && exit 0
-        ufw allow from any to any port 80 proto tcp comment 'ACME temp' &>/dev/null
+        ufw status | grep -q inactive && exit 0
+        ufw allow from any to any port 80 proto tcp comment 'ACME temp'
         exit 0 ;;
     "close-80")
-        ufw status 2>/dev/null | grep -q inactive && exit 0
-        ufw status numbered 2>/dev/null | grep 'ACME temp' \
+        ufw status | grep -q inactive && exit 0
+        ufw status numbered | grep 'ACME temp' \
             | awk -F'[][]' '{print $2}' | sort -rn \
-            | while read -r n; do echo "y" | ufw delete "$n" &>/dev/null; done
+            | while read -r n; do echo "y" | ufw delete "$n"; done
         exit 0 ;;
     "update")
         bash <(curl -fsSL https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main/install.sh) --update
@@ -618,7 +618,7 @@ for mod in lang core xray nginx warp reality relay psiphon tor security logs bac
     [[ -f "$f" ]] && source "$f" || { echo "ERROR: module $mod not found"; exit 1; }
 done
 VWN_CONF="/usr/local/etc/xray/vwn.conf"
-if [[ ! -f "$VWN_CONF" ]] || ! grep -q "VWN_LANG=" "$VWN_CONF" 2>/dev/null; then
+if [[ ! -f "$VWN_CONF" ]] || ! grep -q "VWN_LANG=" "$VWN_CONF"; then
     selectLang; _initLang
 fi
 isRoot
@@ -632,7 +632,7 @@ VWNEOF
 # ВЕРСИЯ
 # -----------------------------------------------------------------
 show_version() {
-    grep 'VWN_VERSION=' "${VWN_LIB}/core.sh" 2>/dev/null \
+    grep 'VWN_VERSION=' "${VWN_LIB}/core.sh" \
         | head -1 | grep -oP '"[^"]+"' | tr -d '"' \
         || echo "unknown"
 }
@@ -657,15 +657,15 @@ install_base_deps() {
                 -o Dpkg::Lock::Timeout=60 \
                 -o Dpkg::Options::='--force-confdef' \
                 -o Dpkg::Options::='--force-confold' \
-                curl jq bash coreutils cron 2>/dev/null || true
+                curl jq bash coreutils cron || true
             set -o pipefail
         "
         soft_step "Активация cron" systemctl enable --now cron
     elif [[ "${PKG_MGR:-}" == "dnf" ]]; then
-        step "curl jq bash cronie" bash -c "dnf install -y curl jq bash cronie 2>/dev/null"
+        step "curl jq bash cronie" bash -c "dnf install -y curl jq bash cronie"
         soft_step "Активация crond" systemctl enable --now crond
     elif [[ "${PKG_MGR:-}" == "yum" ]]; then
-        step "curl jq bash cronie" bash -c "yum install -y curl jq bash cronie 2>/dev/null"
+        step "curl jq bash cronie" bash -c "yum install -y curl jq bash cronie"
         soft_step "Активация crond" systemctl enable --now crond
     fi
 
@@ -678,14 +678,14 @@ _install_jq() {
     local url="https://github.com/jqlang/jq/releases/download/jq-${ver}/jq-linux-amd64"
     local bin="/usr/local/bin/jq"
 
-    local cur; cur=$(jq --version 2>/dev/null | grep -oP '[\d.]+' | head -1 || true)
+    local cur; cur=$(jq --version | grep -oP '[\d.]+' | head -1 || true)
     if [[ "$cur" == "$ver" ]]; then
         log_info "jq ${ver} уже установлен"
         return 0
     fi
 
     local tmp; tmp=$(_mktmp)
-    if curl -fsSL --connect-timeout 15 "$url" -o "$tmp" 2>/dev/null; then
+    if curl -fsSL --connect-timeout 15 "$url" -o "$tmp"; then
         install -m 755 "$tmp" "$bin"
         log_ok "jq ${ver} установлен"
     else
@@ -940,21 +940,21 @@ _auto_ssl() {
                 --post-hook "$VWN_BIN close-80" \
                 --force
         # Убираем временное правило
-        ufw status numbered 2>/dev/null \
+        ufw status numbered \
             | awk '/ACME temp/{gsub(/[][]/,""); print $1}' \
             | sort -rn \
-            | while read -r n; do echo "y" | ufw delete "$n" &>/dev/null || true; done
+            | while read -r n; do echo "y" | ufw delete "$n" || true; done
     fi
 
     step "Установка сертификата" \
         ~/.acme.sh/acme.sh --install-cert -d "$domain" \
             --key-file       /etc/nginx/cert/cert.key \
             --fullchain-file /etc/nginx/cert/cert.pem \
-            --reloadcmd      "systemctl restart nginx 2>/dev/null || true"
+            --reloadcmd      "systemctl restart nginx || true"
 
     # Даём пользователю xray доступ к cert.key — нужно для xray-vision
     chmod 640 /etc/nginx/cert/cert.key
-    chown root:xray /etc/nginx/cert/cert.key 2>/dev/null || true
+    chown root:xray /etc/nginx/cert/cert.key || true
 
     ok "SSL для ${domain} получен"
 }
@@ -964,10 +964,10 @@ _auto_install_ws() {
 
     # UFW
     step "UFW: SSH + HTTPS" bash -c "
-        ufw allow 22/tcp   comment 'SSH'   &>/dev/null || true
-        ufw allow 443/tcp  comment 'HTTPS' &>/dev/null || true
-        ufw allow 443/udp  comment 'HTTPS' &>/dev/null || true
-        echo 'y' | ufw enable &>/dev/null  || true
+        ufw allow 22/tcp   comment 'SSH'   || true
+        ufw allow 443/tcp  comment 'HTTPS' || true
+        ufw allow 443/udp  comment 'HTTPS' || true
+        echo 'y' | ufw enable  || true
     "
 
     # applySysctl, setupSystemDNS — из modules/security.sh и modules/core.sh
@@ -1046,7 +1046,7 @@ _auto_install_vision() {
 _auto_change_ssh_port() {
     local new_port="$1"
     local old_port
-    old_port=$(grep -E "^Port " /etc/ssh/sshd_config 2>/dev/null \
+    old_port=$(grep -E "^Port " /etc/ssh/sshd_config \
                | awk '{print $2}' | head -1)
     old_port="${old_port:-22}"
 
@@ -1057,15 +1057,15 @@ _auto_change_ssh_port() {
     step "sshd_config" \
         sed -i "s/^#\?Port [0-9]*/Port ${new_port}/" /etc/ssh/sshd_config
     step "Перезапуск sshd" \
-        bash -c "systemctl restart sshd 2>/dev/null || systemctl restart ssh"
+        bash -c "systemctl restart sshd || systemctl restart ssh"
 
     # Обновляем Fail2Ban если запущен (changeSshPort из modules/security.sh
     # обновляет fail2ban изнутри, но мы уже поменяли порт напрямую,
     # поэтому только обновляем jail.local)
-    if systemctl is-active --quiet fail2ban 2>/dev/null; then
+    if systemctl is-active --quiet fail2ban; then
         soft_step "Fail2Ban: обновление SSH порта" bash -c "
-            sed -i 's/^port\s*=.*/port     = ${new_port}/' /etc/fail2ban/jail.local 2>/dev/null || true
-            systemctl restart fail2ban 2>/dev/null || true
+            sed -i 's/^port\s*=.*/port     = ${new_port}/' /etc/fail2ban/jail.local || true
+            systemctl restart fail2ban || true
         "
     fi
 
@@ -1082,8 +1082,8 @@ _auto_install_psiphon() {
     step "Psiphon бинарь" installPsiphonBinary
 
     if $OPT_PSIPHON_WARP \
-        && systemctl is-active --quiet warp-svc 2>/dev/null \
-        && ss -tlnp 2>/dev/null | grep -q ':40000'; then
+        && systemctl is-active --quiet warp-svc \
+        && ss -tlnp | grep -q ':40000'; then
         tunnel_mode="warp"
     fi
 
@@ -1099,7 +1099,7 @@ _auto_install_psiphon() {
 }
 
 _auto_toggle_ipv6_on() {
-    local cur; cur=$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null || echo "0")
+    local cur; cur=$(sysctl -n net.ipv6.conf.all.disable_ipv6 || echo "0")
     if [[ "$cur" == "1" ]]; then
         # toggleIPv6 — из modules/security.sh
         step "Включение IPv6" toggleIPv6
@@ -1142,7 +1142,7 @@ _run_auto() {
 
     export DEBIAN_FRONTEND=noninteractive
     info "Обновление списков пакетов..."
-    eval "${PACKAGE_MANAGEMENT_UPDATE}" >/dev/null 2>&1 || true
+    eval "${PACKAGE_MANAGEMENT_UPDATE}" || true
 
     # Ставим все базовые пакеты одной командой — man-db триггер срабатывает один раз
     local base_pkgs=(tar gpg unzip jq nano ufw socat curl qrencode python3)
@@ -1150,7 +1150,7 @@ _run_auto() {
     apt-get -y --no-install-recommends \
         -o Dpkg::Options::="--force-confdef" \
         -o Dpkg::Options::="--force-confold" \
-        install "${base_pkgs[@]}" >/dev/null 2>&1 || true
+        install "${base_pkgs[@]}" || true
 
     step "Xray-core" installXray
 
@@ -1177,7 +1177,7 @@ _run_auto() {
     else
         info "WS пропущен (--skip-ws)"
         soft_step "UFW: SSH" \
-            bash -c "ufw allow 22/tcp comment 'SSH' &>/dev/null && echo 'y' | ufw enable &>/dev/null"
+            bash -c "ufw allow 22/tcp comment 'SSH' && echo 'y' | ufw enable"
         soft_step "Sysctl"   applySysctl
         ! $OPT_NO_WARP && soft_step "WARP" configWarp
     fi
@@ -1285,9 +1285,9 @@ _print_summary() {
 
     # Генерируем QR и subscription — из modules/xray.sh, modules/users.sh
     set +e
-    _initUsersFile 2>/dev/null   || true
-    rebuildAllSubFiles 2>/dev/null || true
-    getQrCode 2>/dev/null          || true
+    _initUsersFile   || true
+    rebuildAllSubFiles || true
+    getQrCode          || true
     set -e
 
     log_ok "Установка завершена"

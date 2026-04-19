@@ -6,7 +6,7 @@
 getRealityStatus() {
     if [ -f "$realityConfigPath" ]; then
         local port
-        port=$(jq -r '.inbounds[0].port' "$realityConfigPath" 2>/dev/null)
+        port=$(jq -r '.inbounds[0].port' "$realityConfigPath")
         echo "${green}ON ($(msg reality_port) $port)${reset}"
     else
         echo "${red}OFF${reset}"
@@ -66,7 +66,7 @@ writeRealityConfig() {
 
     # Автодетект формата шаблона — плейсхолдеры или валидный JSON
     if grep -qE '__UUID__|__PORT__|__PRIVKEY__|__SHORTID__|__DEST__|__HOST__' \
-            "$VWN_CONFIG_DIR/xray_reality.json" 2>/dev/null; then
+            "$VWN_CONFIG_DIR/xray_reality.json"; then
         render_config "$VWN_CONFIG_DIR/xray_reality.json" "$realityConfigPath" \
             UUID     "$new_uuid" \
             PORT     "$realityPort" \
@@ -94,7 +94,7 @@ writeRealityConfig() {
     fi
 
     # Валидация результата
-    if ! jq . "$realityConfigPath" >/dev/null 2>&1; then
+    if ! jq . "$realityConfigPath"; then
         echo "error: writeRealityConfig produced invalid JSON at $realityConfigPath" >&2
         return 1
     fi
@@ -120,7 +120,7 @@ EOF
 
 setupRealityService() {
     # Создаём пользователя xray если не существует
-    id xray &>/dev/null || useradd -r -s /sbin/nologin -d /usr/local/etc/xray xray
+    id xray || useradd -r -s /sbin/nologin -d /usr/local/etc/xray xray
 
     # Создаём директорию логов и передаём под пользователя xray
     mkdir -p /var/log/xray
@@ -141,7 +141,7 @@ setupRealityService() {
         sed -i 's/User=nobody/User=xray/' "$xray_svc"
         sed -i 's/Group=nogroup/Group=xray/' "$xray_svc"
         systemctl daemon-reload
-        systemctl restart xray 2>/dev/null || true
+        systemctl restart xray || true
     fi
     cat > /etc/systemd/system/xray-reality.service << 'EOF'
 [Unit]
@@ -174,24 +174,24 @@ installReality() {
 
     echo "--- [1/3] $(msg install_deps) ---"
     run_task "Swap-файл"        setupSwap
-    run_task "Чистка пакетов"   "rm -f /var/lib/dpkg/lock* && dpkg --configure -a 2>/dev/null || true"
+    run_task "Чистка пакетов"   "rm -f /var/lib/dpkg/lock* && dpkg --configure -a || true"
     run_task "Обновление репозиториев" "$PACKAGE_MANAGEMENT_UPDATE"
 
     echo "--- [2/3] $(msg install_deps) ---"
     for p in tar gpg unzip jq nano ufw socat curl qrencode python3; do
         run_task "Установка $p" "installPackage '$p'" || true
     done
-    if ! command -v xray &>/dev/null; then
+    if ! command -v xray; then
         run_task "Установка Xray-core" installXray
     fi
-    if ! command -v warp-cli &>/dev/null; then
+    if ! command -v warp-cli; then
         run_task "Установка Cloudflare WARP" installWarp
     fi
 
     echo "--- [3/3] $(msg menu_sep_sec) ---"
     run_task "Настройка UFW" "ufw allow 22/tcp && echo 'y' | ufw enable"
     run_task "Системные параметры" applySysctl
-    if ! systemctl is-active --quiet warp-svc 2>/dev/null; then
+    if ! systemctl is-active --quiet warp-svc; then
         run_task "Настройка WARP" configWarp
         run_task "WARP Watchdog" setupWarpWatchdog
     fi
@@ -220,7 +220,7 @@ installReality() {
     esac
 
     echo -e "${cyan}$(msg reality_open_port) $realityPort $(msg reality_ufw)${reset}"
-    ufw allow "$realityPort"/tcp comment 'Xray Reality' 2>/dev/null || true
+    ufw allow "$realityPort"/tcp comment 'Xray Reality' || true
 
     writeRealityConfig "$realityPort" "$dest" || return 1
     setupRealityService || return 1
@@ -258,8 +258,8 @@ showRealityInfo() {
     shortId=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$realityConfigPath")
     destHost=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0]' "$realityConfigPath")
     serverIP=$(_getPublicIP)
-    pubKey=$(vwn_conf_get REALITY_PUBKEY 2>/dev/null)
-    [ -z "$pubKey" ] && pubKey=$(grep "PublicKey:" /usr/local/etc/xray/reality_client.txt 2>/dev/null | awk '{print $2}')
+    pubKey=$(vwn_conf_get REALITY_PUBKEY)
+    [ -z "$pubKey" ] && pubKey=$(grep "PublicKey:" /usr/local/etc/xray/reality_client.txt | awk '{print $2}')
 
     port=$(jq -r '.inbounds[0].port' "$realityConfigPath")
 
@@ -275,7 +275,7 @@ showRealityInfo() {
     r_label="default"
     [ -f "$USERS_FILE" ] && r_label=$(cut -d'|' -f2 "$USERS_FILE" | head -1)
     r_name=$(_getConfigName "Reality" "$r_label" "$serverIP")
-    r_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$r_name" 2>/dev/null || echo "$r_name")
+    r_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$r_name" || echo "$r_name")
     local url="vless://${uuid}@${serverIP}:${port}?encryption=none&security=reality&sni=${destHost}&fp=chrome&pbk=${pubKey}&sid=${shortId}&type=tcp&flow=xtls-rprx-vision#${r_encoded_name}"
     echo -e "${green}$url${reset}"
     echo "--------------------------------------------------"
@@ -288,8 +288,8 @@ showRealityQR() {
     uuid=$(jq -r '.inbounds[0].settings.clients[0].id' "$realityConfigPath")
     shortId=$(jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' "$realityConfigPath")
     destHost=$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[0]' "$realityConfigPath")
-    pubKey=$(vwn_conf_get REALITY_PUBKEY 2>/dev/null)
-    [ -z "$pubKey" ] && pubKey=$(grep "PublicKey:" /usr/local/etc/xray/reality_client.txt 2>/dev/null | awk '{print $2}')
+    pubKey=$(vwn_conf_get REALITY_PUBKEY)
+    [ -z "$pubKey" ] && pubKey=$(grep "PublicKey:" /usr/local/etc/xray/reality_client.txt | awk '{print $2}')
     serverIP=$(_getPublicIP)
 
     port=$(jq -r '.inbounds[0].port' "$realityConfigPath")
@@ -298,9 +298,9 @@ showRealityQR() {
     r_label="default"
     [ -f "$USERS_FILE" ] && r_label=$(cut -d'|' -f2 "$USERS_FILE" | head -1)
     r_name=$(_getConfigName "Reality" "$r_label" "$serverIP")
-    r_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$r_name" 2>/dev/null || echo "$r_name")
+    r_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$r_name" || echo "$r_name")
     local url="vless://${uuid}@${serverIP}:${port}?encryption=none&security=reality&sni=${destHost}&fp=chrome&pbk=${pubKey}&sid=${shortId}&type=tcp&flow=xtls-rprx-vision#${r_encoded_name}"
-    command -v qrencode &>/dev/null || installPackage "qrencode"
+    command -v qrencode || installPackage "qrencode"
     qrencode -s 1 -m 1 -t ANSIUTF8 "$url"
     echo -e "\n${green}$url${reset}\n"
 }
@@ -321,8 +321,8 @@ modifyRealityPort() {
     if ! [[ "$newPort" =~ ^[0-9]+$ ]] || [ "$newPort" -lt 1024 ] || [ "$newPort" -gt 65535 ]; then
         echo "${red}$(msg invalid_port)${reset}"; return 1
     fi
-    ufw allow "$newPort"/tcp comment 'Xray Reality' 2>/dev/null || true
-    ufw delete allow "$oldPort"/tcp 2>/dev/null || true
+    ufw allow "$newPort"/tcp comment 'Xray Reality' || true
+    ufw delete allow "$oldPort"/tcp || true
     jq ".inbounds[0].port = $newPort" \
         "$realityConfigPath" > "${realityConfigPath}.tmp" && mv "${realityConfigPath}.tmp" "$realityConfigPath"
     systemctl restart xray-reality
@@ -352,20 +352,20 @@ modifyRealityDest() {
         "$realityConfigPath" > "${realityConfigPath}.tmp" && mv "${realityConfigPath}.tmp" "$realityConfigPath"
     systemctl restart xray-reality
     echo "${green}$(msg reality_dest_changed) $newDest${reset}"
-    rebuildAllSubFiles 2>/dev/null || true
+    rebuildAllSubFiles || true
 }
 
 removeReality() {
     echo -e "${red}$(msg reality_remove_confirm) $(msg yes_no)${reset}"
     read -r confirm
     if [[ "$confirm" == "y" ]]; then
-        systemctl stop xray-reality 2>/dev/null || true
-        systemctl disable xray-reality 2>/dev/null || true
+        systemctl stop xray-reality || true
+        systemctl disable xray-reality || true
         rm -f /etc/systemd/system/xray-reality.service
         rm -f "$realityConfigPath" /usr/local/etc/xray/reality_client.txt
         systemctl daemon-reload
         echo "${green}$(msg removed)${reset}"
-        rebuildAllSubFiles 2>/dev/null || true
+        rebuildAllSubFiles || true
     fi
 }
 
@@ -376,8 +376,8 @@ rebuildRealityConfigs() {
     fi
 
     local realityPort dest
-    realityPort=$(jq -r '.inbounds[0].port // ""' "$realityConfigPath" 2>/dev/null)
-    dest=$(jq -r '.inbounds[0].streamSettings.realitySettings.dest // ""' "$realityConfigPath" 2>/dev/null)
+    realityPort=$(jq -r '.inbounds[0].port // ""' "$realityConfigPath")
+    dest=$(jq -r '.inbounds[0].streamSettings.realitySettings.dest // ""' "$realityConfigPath")
 
     # ❗ НИКОГДА НЕ ГЕНЕРИРУЕМ НОВЫЕ КЛЮЧИ!
     # Все ключи остаются нетронутыми, мы только перезаписываем шаблон
@@ -392,16 +392,16 @@ rebuildRealityConfigs() {
     writeRealityConfig "$realityPort" "$dest"
 
     echo -e "  ${cyan}[2/2] Applying active features...${reset}"
-    [ -f "$warpDomainsFile" ] && applyWarpDomains 2>/dev/null || true
-    [ -f "$relayConfigFile" ] && applyRelayDomains 2>/dev/null || true
-    [ -f "$psiphonConfigFile" ] && applyPsiphonDomains 2>/dev/null || true
-    [ -f "$torConfigFile" ] && applyTorDomains 2>/dev/null || true
-    _adblockIsEnabled && _adblockApplyToConfig "$realityConfigPath" 2>/dev/null || true
-    _privacyIsEnabled && _xrayDisableLog "$realityConfigPath" 2>/dev/null || true
+    [ -f "$warpDomainsFile" ] && applyWarpDomains || true
+    [ -f "$relayConfigFile" ] && applyRelayDomains || true
+    [ -f "$psiphonConfigFile" ] && applyPsiphonDomains || true
+    [ -f "$torConfigFile" ] && applyTorDomains || true
+    _adblockIsEnabled && _adblockApplyToConfig "$realityConfigPath" || true
+    _privacyIsEnabled && _xrayDisableLog "$realityConfigPath" || true
 
-    systemctl restart xray-reality 2>/dev/null || true
+    systemctl restart xray-reality || true
 
-    $skip_sub || rebuildAllSubFiles 2>/dev/null || true
+    $skip_sub || rebuildAllSubFiles || true
 
     echo "${green}Done. Reality configs rebuilt.${reset}"
 }
@@ -413,8 +413,8 @@ manageReality() {
         local s_reality s_warp s_port s_dest
         s_reality=$(getServiceStatus xray-reality)
         s_warp=$(getWarpStatus)
-        s_port=$(jq -r '.inbounds[0].port // "—"' "$realityConfigPath" 2>/dev/null)
-        s_dest=$(jq -r '.inbounds[0].streamSettings.realitySettings.dest // "—"' "$realityConfigPath" 2>/dev/null)
+        s_port=$(jq -r '.inbounds[0].port // "—"' "$realityConfigPath")
+        s_dest=$(jq -r '.inbounds[0].streamSettings.realitySettings.dest // "—"' "$realityConfigPath")
         echo -e "${cyan}================================================================${reset}"
         printf "   ${red}VLESS + Reality${reset}  %s\n" "$(date +'%d.%m.%Y %H:%M')"
         echo -e "${cyan}----------------------------------------------------------------${reset}"
@@ -445,7 +445,7 @@ manageReality() {
             7) systemctl restart xray-reality && echo "${green}$(msg restarted)${reset}" ;;
             8) journalctl -u xray-reality -n 50 --no-pager
                echo "---"
-               tail -n 30 /var/log/xray/reality-error.log 2>/dev/null || true ;;
+               tail -n 30 /var/log/xray/reality-error.log || true ;;
             9) removeReality ;;
             10) rebuildRealityConfigs ;;
             0) break ;;

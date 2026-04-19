@@ -714,7 +714,7 @@ Backups in `/root/vwn-backups/` are not removed automatically.
 
 ## Version
 
-Current: **1.0**
+Current: **3.1**
 
 ## License
 
@@ -1438,7 +1438,7 @@ vwn  # Пункт 34
 
 ## Версия
 
-Текущая: **1.0**
+Текущая: **3.1**
 
 ## Лицензия
 

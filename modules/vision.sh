@@ -16,10 +16,10 @@ VISION_SERVICE="/etc/systemd/system/xray-vision.service"
 
 _ensureVisionLogAccess() {
     mkdir -p /var/log/xray
-    touch /var/log/xray/vision-error.log 2>/dev/null || true
-    chown -R xray:xray /var/log/xray 2>/dev/null || true
-    chmod 750 /var/log/xray 2>/dev/null || true
-    chmod 640 /var/log/xray/vision-error.log 2>/dev/null || true
+    touch /var/log/xray/vision-error.log || true
+    chown -R xray:xray /var/log/xray || true
+    chmod 750 /var/log/xray || true
+    chmod 640 /var/log/xray/vision-error.log || true
 }
 
 # ── Статус ────────────────────────────────────────────────────────
@@ -29,9 +29,9 @@ getVisionStatus() {
         echo "${red}NOT INSTALLED${reset}"
         return
     fi
-    if systemctl is-active --quiet xray-vision 2>/dev/null; then
+    if systemctl is-active --quiet xray-vision; then
         local domain
-        domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
+        domain=$(vwn_conf_get DOMAIN || true)
         echo "${green}RUNNING${reset} | ${domain:-?}:443 (напрямую)"
     else
         echo "${red}STOPPED${reset}"
@@ -49,8 +49,8 @@ writeVisionConfig() {
     render_config "$VWN_CONFIG_DIR/xray_vision.json" "$visionConfigPath" \
         UUID "$uuid"
 
-    chown xray:xray "$visionConfigPath" 2>/dev/null || true
-    chmod 640 "$visionConfigPath" 2>/dev/null || true
+    chown xray:xray "$visionConfigPath" || true
+    chmod 640 "$visionConfigPath" || true
     echo "${green}Vision config written: $visionConfigPath${reset}"
 }
 
@@ -76,17 +76,17 @@ _visionApplyActiveFeatures() {
     echo -e "${cyan}$(msg vision_apply_features)${reset}"
 
     # WARP
-    if command -v warp-cli &>/dev/null; then
+    if command -v warp-cli; then
         local warp_raw warp_rule
-        warp_raw=$(getWarpStatusRaw 2>/dev/null || echo "OFF")
+        warp_raw=$(getWarpStatusRaw || echo "OFF")
         if [ "$warp_raw" = "ACTIVE" ] && [ -f "$configPath" ]; then
-            warp_rule=$(jq -r '.routing.rules[] | select(.outboundTag=="warp") | if .port == "0-65535" then "Global" elif (.domain | length) > 0 then "Split" else "" end' "$configPath" 2>/dev/null | head -1)
+            warp_rule=$(jq -r '.routing.rules[] | select(.outboundTag=="warp") | if .port == "0-65535" then "Global" elif (.domain | length) > 0 then "Split" else "" end' "$configPath" | head -1)
             case "$warp_rule" in
                 Global)
                     jq '(.routing.rules[] | select(.outboundTag == "warp")) |= (.port = "0-65535" | del(.domain))' \
-                        "$visionConfigPath" > "${visionConfigPath}.tmp" && mv "${visionConfigPath}.tmp" "$visionConfigPath" 2>/dev/null || true
+                        "$visionConfigPath" > "${visionConfigPath}.tmp" && mv "${visionConfigPath}.tmp" "$visionConfigPath" || true
                     ;;
-                Split) applyWarpDomains 2>/dev/null || true ;;
+                Split) applyWarpDomains || true ;;
             esac
         fi
     fi
@@ -94,41 +94,41 @@ _visionApplyActiveFeatures() {
     # Relay
     if [ -f "$relayConfigFile" ] && [ -f "$configPath" ]; then
         local relay_rule
-        relay_rule=$(jq -r '.routing.rules[] | select(.outboundTag=="relay") | if .port == "0-65535" then "Global" elif (.domain | length) > 0 then "Split" else "" end' "$configPath" 2>/dev/null | head -1)
+        relay_rule=$(jq -r '.routing.rules[] | select(.outboundTag=="relay") | if .port == "0-65535" then "Global" elif (.domain | length) > 0 then "Split" else "" end' "$configPath" | head -1)
         case "$relay_rule" in
-            Global) toggleRelayGlobal 2>/dev/null || true ;;
-            Split)  applyRelayDomains 2>/dev/null || true ;;
+            Global) toggleRelayGlobal || true ;;
+            Split)  applyRelayDomains || true ;;
         esac
     fi
 
     # Psiphon
     if [ -f "$psiphonConfigFile" ] && [ -f "$configPath" ]; then
         local psiphon_rule
-        psiphon_rule=$(jq -r '.routing.rules[] | select(.outboundTag=="psiphon") | if .port == "0-65535" then "Global" elif (.domain | length) > 0 then "Split" else "" end' "$configPath" 2>/dev/null | head -1)
+        psiphon_rule=$(jq -r '.routing.rules[] | select(.outboundTag=="psiphon") | if .port == "0-65535" then "Global" elif (.domain | length) > 0 then "Split" else "" end' "$configPath" | head -1)
         case "$psiphon_rule" in
-            Global) togglePsiphonGlobal 2>/dev/null || true ;;
-            Split)  applyPsiphonDomains 2>/dev/null || true ;;
+            Global) togglePsiphonGlobal || true ;;
+            Split)  applyPsiphonDomains || true ;;
         esac
     fi
 
     # Tor
-    if command -v tor &>/dev/null && [ -f "$configPath" ]; then
+    if command -v tor && [ -f "$configPath" ]; then
         local tor_rule
-        tor_rule=$(jq -r '.routing.rules[] | select(.outboundTag=="tor") | if .port == "0-65535" then "Global" elif (.domain | length) > 0 then "Split" else "" end' "$configPath" 2>/dev/null | head -1)
+        tor_rule=$(jq -r '.routing.rules[] | select(.outboundTag=="tor") | if .port == "0-65535" then "Global" elif (.domain | length) > 0 then "Split" else "" end' "$configPath" | head -1)
         case "$tor_rule" in
-            Global) toggleTorGlobal 2>/dev/null || true ;;
-            Split)  applyTorDomains 2>/dev/null || true ;;
+            Global) toggleTorGlobal || true ;;
+            Split)  applyTorDomains || true ;;
         esac
     fi
 
     # Adblock
-    if _adblockIsEnabled 2>/dev/null; then
-        _adblockApplyToConfig "$visionConfigPath" 2>/dev/null || true
+    if _adblockIsEnabled; then
+        _adblockApplyToConfig "$visionConfigPath" || true
     fi
 
     # Privacy mode
-    if _privacyIsEnabled 2>/dev/null; then
-        _xrayDisableLog "$visionConfigPath" 2>/dev/null || true
+    if _privacyIsEnabled; then
+        _xrayDisableLog "$visionConfigPath" || true
     fi
 }
 
@@ -147,7 +147,7 @@ installVision() {
     echo ""
 
     # 1. WS+TLS должен быть установлен (нужен Nginx + SSL cert + домен)
-    if [ ! -f "$configPath" ] || ! command -v nginx &>/dev/null; then
+    if [ ! -f "$configPath" ] || ! command -v nginx; then
         echo "${red}$(msg vision_ws_required)${reset}"
         return 1
     fi
@@ -159,7 +159,7 @@ installVision() {
 
     # 3. Проверяем что порт 443 свободен
     local _port443_proc
-    _port443_proc=$(ss -tlnp 'sport = :443' 2>/dev/null | awk 'NR>1{print $NF}' | grep -v nginx | grep -v xray || true)
+    _port443_proc=$(ss -tlnp 'sport = :443' | awk 'NR>1{print $NF}' | grep -v nginx | grep -v xray || true)
     if [ -n "$_port443_proc" ]; then
         echo "${red}Порт 443 занят другим процессом: ${_port443_proc}${reset}"
         echo "${yellow}Освободите порт 443 перед установкой Vision.${reset}"
@@ -168,7 +168,7 @@ installVision() {
 
     # 4. Используем ОБЩИЙ домен из WS
     local vision_domain
-    vision_domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
+    vision_domain=$(vwn_conf_get DOMAIN || true)
     if [ -z "$vision_domain" ]; then
         echo "${red}Домен не настроен. Сначала установите WS+TLS.${reset}"
         return 1
@@ -177,7 +177,7 @@ installVision() {
 
     # 5. UUID
     local uuid
-    uuid=$(xray uuid 2>/dev/null || python3 -c "import uuid; print(uuid.uuid4())")
+    uuid=$(xray uuid || python3 -c "import uuid; print(uuid.uuid4())")
 
     # 6. Конфиг Xray (Vision на 443, fallback на 7443)
     echo -e "${cyan}$(msg vision_installing)${reset}"
@@ -185,22 +185,22 @@ installVision() {
 
     # 7. Пересобираем Nginx конфиг — Vision режим (Nginx на 7443 без SSL)
     local proxy_url
-    proxy_url=$(vwn_conf_get STUB_URL 2>/dev/null || echo "https://www.bing.com/")
+    proxy_url=$(vwn_conf_get STUB_URL || echo "https://www.bing.com/")
     writeNginxConfigVision "$proxy_url" "$vision_domain"
 
     # 8. Освобождаем порт 443: останавливаем nginx до старта xray-vision
-    systemctl stop nginx 2>/dev/null || true
+    systemctl stop nginx || true
     sleep 1
 
     # 9. Сервис
     if ! setupVisionService; then
         # Если xray-vision не стартовал — возвращаем nginx обратно
-        systemctl start nginx 2>/dev/null || true
+        systemctl start nginx || true
         return 1
     fi
 
     # 10. Запускаем nginx на 7443 (fallback для xray-vision)
-    systemctl start nginx 2>/dev/null || true
+    systemctl start nginx || true
 
     # 9. Сохраняем мета-данные
     vwn_conf_set VISION_UUID   "$uuid"
@@ -218,7 +218,7 @@ installVision() {
     showVisionQR
 
     # 12. Перегенерируем подписки
-    rebuildAllSubFiles 2>/dev/null || true
+    rebuildAllSubFiles || true
 }
 
 # ── Информация и QR ───────────────────────────────────────────────
@@ -230,9 +230,9 @@ showVisionInfo() {
     fi
 
     local domain uuid server_ip
-    domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
-    uuid=$(vwn_conf_get VISION_UUID 2>/dev/null || \
-        jq -r '.inbounds[0].settings.clients[0].id // ""' "$visionConfigPath" 2>/dev/null)
+    domain=$(vwn_conf_get DOMAIN || true)
+    uuid=$(vwn_conf_get VISION_UUID || \
+        jq -r '.inbounds[0].settings.clients[0].id // ""' "$visionConfigPath")
     server_ip=$(getServerIP)
 
     echo ""
@@ -256,29 +256,29 @@ showVisionQR() {
     fi
 
     local domain uuid
-    domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
-    uuid=$(vwn_conf_get VISION_UUID 2>/dev/null || \
-        jq -r '.inbounds[0].settings.clients[0].id // ""' "$visionConfigPath" 2>/dev/null)
+    domain=$(vwn_conf_get DOMAIN || true)
+    uuid=$(vwn_conf_get VISION_UUID || \
+        jq -r '.inbounds[0].settings.clients[0].id // ""' "$visionConfigPath")
 
     [ -z "$domain" ] || [ -z "$uuid" ] && {
         echo "${red}$(msg vision_not_installed)${reset}"; return
     }
 
     local flag server_ip v_label v_name v_encoded_name modes
-    server_ip=$(getServerIP 2>/dev/null || echo "")
-    flag=$(_getCountryFlag "$server_ip" 2>/dev/null || echo "🌐")
-    modes=$(_getActiveModesSuffix 2>/dev/null || true)
+    server_ip=$(getServerIP || echo "")
+    flag=$(_getCountryFlag "$server_ip" || echo "🌐")
+    modes=$(_getActiveModesSuffix || true)
     v_label="default"
     [ -f "$USERS_FILE" ] && v_label=$(cut -d'|' -f2 "$USERS_FILE" | head -1)
     v_name="${flag} VL-Vision | ${v_label} ${flag}${modes}"
-    v_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$v_name" 2>/dev/null || echo "$v_name")
+    v_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$v_name" || echo "$v_name")
 
     local link
     link="vless://${uuid}@${domain}:443?security=tls&flow=xtls-rprx-vision&type=tcp&sni=${domain}&fp=chrome&allowInsecure=0#${v_encoded_name}"
 
     echo -e "${cyan}$(msg vision_qr_title):${reset}"
     echo ""
-    if command -v qrencode &>/dev/null; then
+    if command -v qrencode; then
         qrencode -t ANSIUTF8 "$link"
     fi
     echo ""
@@ -293,13 +293,13 @@ modifyVisionUUID() {
         echo "${red}$(msg vision_not_installed)${reset}"; return
     fi
     local new_uuid
-    new_uuid=$(xray uuid 2>/dev/null || python3 -c "import uuid; print(uuid.uuid4())")
+    new_uuid=$(xray uuid || python3 -c "import uuid; print(uuid.uuid4())")
     jq --arg u "$new_uuid" \
         '.inbounds[0].settings.clients[0].id = $u' \
         "$visionConfigPath" > "${visionConfigPath}.tmp" \
         && mv "${visionConfigPath}.tmp" "$visionConfigPath"
     vwn_conf_set VISION_UUID "$new_uuid"
-    systemctl restart xray-vision 2>/dev/null || true
+    systemctl restart xray-vision || true
     echo "${green}$(msg vision_uuid_changed)${reset}"
     echo "  New UUID: ${green}${new_uuid}${reset}"
 }
@@ -312,12 +312,12 @@ modifyVisionDomain() {
     fi
 
     local current_domain
-    current_domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
+    current_domain=$(vwn_conf_get DOMAIN || true)
     echo -e "${cyan}Текущий домен:${reset} ${green}${current_domain:-?}${reset}"
     read -rp "$(msg enter_new_domain): " new_domain
     [ -z "$new_domain" ] && return
 
-    if ! _validateDomain "$new_domain" &>/dev/null; then
+    if ! _validateDomain "$new_domain"; then
         echo "${red}$(msg invalid): '$new_domain'${reset}"
         return 1
     fi
@@ -339,8 +339,8 @@ modifyVisionDomain() {
 
     # 4. Обновляем Vision config.json
     local vision_uuid
-    vision_uuid=$(vwn_conf_get VISION_UUID 2>/dev/null || \
-        jq -r '.inbounds[0].settings.clients[0].id // ""' "$visionConfigPath" 2>/dev/null)
+    vision_uuid=$(vwn_conf_get VISION_UUID || \
+        jq -r '.inbounds[0].settings.clients[0].id // ""' "$visionConfigPath")
     if [ -n "$vision_uuid" ]; then
         writeVisionConfig "$vision_uuid"
         echo "${green}Vision config обновлён.${reset}"
@@ -348,19 +348,19 @@ modifyVisionDomain() {
 
     # 5. Пересобираем nginx в режиме Vision
     local proxy_url
-    proxy_url=$(vwn_conf_get STUB_URL 2>/dev/null || echo "https://www.bing.com/")
+    proxy_url=$(vwn_conf_get STUB_URL || echo "https://www.bing.com/")
     writeNginxConfigVision "$proxy_url" "$new_domain"
     echo "${green}Nginx config (Vision mode) обновлён.${reset}"
 
     # 6. Перезапускаем сервисы
-    systemctl restart nginx xray xray-vision 2>/dev/null || true
+    systemctl restart nginx xray xray-vision || true
     if ! systemctl is-active --quiet xray-vision; then
         echo "${red}xray-vision не запустился. Проверьте journalctl -u xray-vision${reset}"
         return 1
     fi
 
     # 7. Обновляем подписки
-    rebuildAllSubFiles 2>/dev/null || true
+    rebuildAllSubFiles || true
 
     echo "${green}Домен успешно изменён на ${new_domain}${reset}"
 }
@@ -374,8 +374,8 @@ removeVision() {
 
     echo -e "${cyan}Removing Vision...${reset}"
 
-    systemctl stop xray-vision 2>/dev/null || true
-    systemctl disable xray-vision 2>/dev/null || true
+    systemctl stop xray-vision || true
+    systemctl disable xray-vision || true
     rm -f "$VISION_SERVICE"
     systemctl daemon-reload
 
@@ -386,16 +386,16 @@ removeVision() {
 
     # Пересобираем Nginx — вернёт на base режим (Nginx на 443)
     local ws_domain ws_port proxy_url ws_path
-    ws_domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
-    ws_port=$(jq -r '.inbounds[0].port // empty' "$configPath" 2>/dev/null)
-    proxy_url=$(grep -oP "(?<=proxy_pass )[^;]+" "$nginxPath" 2>/dev/null | tail -1)
-    ws_path=$(jq -r '.inbounds[0].streamSettings.wsSettings.path // ""' "$configPath" 2>/dev/null)
+    ws_domain=$(vwn_conf_get DOMAIN || true)
+    ws_port=$(jq -r '.inbounds[0].port // empty' "$configPath")
+    proxy_url=$(grep -oP "(?<=proxy_pass )[^;]+" "$nginxPath" | tail -1)
+    ws_path=$(jq -r '.inbounds[0].streamSettings.wsSettings.path // ""' "$configPath")
     writeNginxConfigBase "$ws_port" "$ws_domain" "$proxy_url" "$ws_path"
 
-    nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || true
+    nginx -t && systemctl reload nginx || true
 
     echo "${green}$(msg vision_removed)${reset}"
-    rebuildAllSubFiles 2>/dev/null || true
+    rebuildAllSubFiles || true
 }
 
 # ── Пересоздание конфигов без переустановки ──────────────────────
@@ -407,8 +407,8 @@ rebuildVisionConfigs() {
     fi
 
     local vision_uuid
-    vision_uuid=$(vwn_conf_get VISION_UUID 2>/dev/null || \
-        jq -r '.inbounds[0].settings.clients[0].id // ""' "$visionConfigPath" 2>/dev/null)
+    vision_uuid=$(vwn_conf_get VISION_UUID || \
+        jq -r '.inbounds[0].settings.clients[0].id // ""' "$visionConfigPath")
 
     if [ -z "$vision_uuid" ]; then
         echo "${red}$(msg vision_not_installed) (missing params in vwn.conf)${reset}"; return 1
@@ -421,22 +421,22 @@ rebuildVisionConfigs() {
 
     echo -e "  ${cyan}[2/3] nginx.conf...${reset}"
     local domain proxy_url
-    domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
-    proxy_url=$(vwn_conf_get STUB_URL 2>/dev/null || echo "https://www.bing.com/")
+    domain=$(vwn_conf_get DOMAIN || true)
+    proxy_url=$(vwn_conf_get STUB_URL || echo "https://www.bing.com/")
     writeNginxConfigVision "$proxy_url" "$domain"
 
     echo -e "  ${cyan}[3/3] Restarting services...${reset}"
     nginx -t && systemctl reload nginx || {
         echo "${red}$(msg nginx_syntax_err)${reset}"; return 1
     }
-    systemctl restart xray-vision 2>/dev/null || true
-    if ! systemctl is-active --quiet xray-vision 2>/dev/null; then
+    systemctl restart xray-vision || true
+    if ! systemctl is-active --quiet xray-vision; then
         echo "${red}xray-vision failed to start after rebuild.${reset}"
-        journalctl -u xray-vision -n 30 --no-pager 2>/dev/null || true
+        journalctl -u xray-vision -n 30 --no-pager || true
         return 1
     fi
 
-    $skip_sub || rebuildAllSubFiles 2>/dev/null || true
+    $skip_sub || rebuildAllSubFiles || true
 
     echo "${green}Done. Vision configs rebuilt.${reset}"
 }
@@ -453,8 +453,8 @@ manageVision() {
         echo -e "  $(msg status): $(getVisionStatus)"
         if [ -f "$visionConfigPath" ]; then
             local _dom _uuid
-            _dom=$(vwn_conf_get DOMAIN 2>/dev/null || true)
-            _uuid=$(vwn_conf_get VISION_UUID 2>/dev/null || true)
+            _dom=$(vwn_conf_get DOMAIN || true)
+            _uuid=$(vwn_conf_get VISION_UUID || true)
             echo -e "  $(msg lbl_domain): ${green}${_dom:-?}${reset}"
             echo -e "  UUID:   ${green}${_uuid:-?}${reset}"
             echo -e "  $(msg lbl_port):   443 (напрямую)"

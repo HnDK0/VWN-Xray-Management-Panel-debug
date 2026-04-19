@@ -7,7 +7,7 @@ prepareSoftware() {
     identifyOS
     echo "--- [1/3] $(msg install_deps) ---"
     run_task "Swap-файл"        setupSwap
-    run_task "Чистка пакетов"   "rm -f /var/lib/dpkg/lock* && dpkg --configure -a 2>/dev/null || true"
+    run_task "Чистка пакетов"   "rm -f /var/lib/dpkg/lock* && dpkg --configure -a || true"
     run_task "Обновление репозиториев" "$PACKAGE_MANAGEMENT_UPDATE"
 
     echo "--- [2/3] $(msg install_deps) ---"
@@ -27,20 +27,20 @@ _installNginxMainline() {
         return 0
     fi
     echo -e "${cyan}nginx ${cur_ver:-not installed} — installing mainline from nginx.org...${reset}"
-    if command -v apt &>/dev/null; then
+    if command -v apt; then
         installPackage gnupg2 || true
         curl -fsSL https://nginx.org/keys/nginx_signing.key \
-            | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg 2>/dev/null
+            | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
         local codename
-        codename=$(lsb_release -cs 2>/dev/null || . /etc/os-release && echo "$VERSION_CODENAME")
+        codename=$(lsb_release -cs || . /etc/os-release && echo "$VERSION_CODENAME")
         echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/mainline/ubuntu ${codename} nginx" \
             > /etc/apt/sources.list.d/nginx-mainline.list
         printf 'Package: *\nPin: origin nginx.org\nPin-Priority: 900\n' \
             > /etc/apt/preferences.d/99nginx
-        apt-get update -qq 2>/dev/null
-        apt-get remove -y nginx nginx-common nginx-core 2>/dev/null || true
+        apt-get update -qq
+        apt-get remove -y nginx nginx-common nginx-core || true
         apt-get install -y nginx
-    elif command -v dnf &>/dev/null || command -v yum &>/dev/null; then
+    elif command -v dnf || command -v yum; then
         cat > /etc/yum.repos.d/nginx-mainline.repo << 'YUMEOF'
 [nginx-mainline]
 name=nginx mainline repo
@@ -96,7 +96,7 @@ installWsTls() {
     while true; do
         read -rp "$(msg enter_xray_port)" xrayPort
         [ -z "$xrayPort" ] && xrayPort=16500
-        if ! _validatePort "$xrayPort" &>/dev/null; then
+        if ! _validatePort "$xrayPort"; then
             echo "${red}$(msg invalid_port) (1024-65535)${reset}"; continue
         fi
         break
@@ -157,7 +157,7 @@ installWsTls() {
 
     # Запускаем nginx ДО выпуска SSL — acme.sh делает reload по окончании
     systemctl enable --now nginx
-    systemctl start nginx 2>/dev/null || true
+    systemctl start nginx || true
 
     run_task "Настройка WARP"          configWarp
     run_task "Выпуск SSL"              "userDomain='$userDomain' configCert"
@@ -172,7 +172,7 @@ installWsTls() {
     # Устанавливаем Reality если выбрано
     if $install_reality; then
         echo -e "\n${cyan}--- Reality ---${reset}"
-        ufw allow "$realityPort"/tcp comment 'Xray Reality' 2>/dev/null || true
+        ufw allow "$realityPort"/tcp comment 'Xray Reality' || true
         REALITY_INTERNAL_PORT=$realityPort
         run_task "Конфиг Reality"  "writeRealityConfig '$realityPort' '$realityDest'"
         run_task "Сервис Reality"  setupRealityService
@@ -219,13 +219,13 @@ fullRemove() {
     echo -e "${red}$(msg remove_confirm) $(msg yes_no)${reset}"
     read -r confirm
     if [[ "$confirm" == "y" ]]; then
-        systemctl stop nginx xray xray-reality warp-svc psiphon tor 2>/dev/null || true
-        warp-cli disconnect 2>/dev/null || true
+        systemctl stop nginx xray xray-reality warp-svc psiphon tor || true
+        warp-cli disconnect || true
         [ -z "${PACKAGE_MANAGEMENT_REMOVE:-}" ] && identifyOS
         uninstallPackage 'nginx*' || true
         uninstallPackage 'cloudflare-warp' || true
         bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove || true
-        systemctl disable xray-reality psiphon 2>/dev/null || true
+        systemctl disable xray-reality psiphon || true
         rm -f /etc/systemd/system/xray-reality.service
         rm -f /etc/systemd/system/psiphon.service
         rm -f "$torDomainsFile"
@@ -244,8 +244,8 @@ removeWs() {
     echo -e "${red}$(msg remove_confirm) $(msg yes_no)${reset}"
     read -r confirm
     [[ "$confirm" != "y" ]] && return 0
-    systemctl stop nginx xray 2>/dev/null || true
-    systemctl disable nginx xray 2>/dev/null || true
+    systemctl stop nginx xray || true
+    systemctl disable nginx xray || true
     [ -z "${PACKAGE_MANAGEMENT_REMOVE:-}" ] && identifyOS
     uninstallPackage 'nginx*' || true
     bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove || true
@@ -267,10 +267,10 @@ manageWs() {
         s_ssl=$(checkCertExpiry)
         s_cfguard=$(getCfGuardStatus)
         s_warp=$(getWarpStatus)
-        s_domain=$(jq -r '.inbounds[0].streamSettings.wsSettings.host // .inbounds[0].streamSettings.xhttpSettings.host // "—"' "$configPath" 2>/dev/null)
-        s_connect=$(cat "$CONNECT_HOST_FILE" 2>/dev/null | tr -d '[:space:]')
-        s_port=$(jq -r '.inbounds[0].port // "—"' "$configPath" 2>/dev/null)
-        s_path=$(jq -r '.inbounds[0].streamSettings.wsSettings.path // .inbounds[0].streamSettings.xhttpSettings.path // "—"' "$configPath" 2>/dev/null)
+        s_domain=$(jq -r '.inbounds[0].streamSettings.wsSettings.host // .inbounds[0].streamSettings.xhttpSettings.host // "—"' "$configPath")
+        s_connect=$(cat "$CONNECT_HOST_FILE" | tr -d '[:space:]')
+        s_port=$(jq -r '.inbounds[0].port // "—"' "$configPath")
+        s_path=$(jq -r '.inbounds[0].streamSettings.wsSettings.path // .inbounds[0].streamSettings.xhttpSettings.path // "—"' "$configPath")
         # Обрезаем длинные значения
         [ ${#s_connect} -gt 35 ] && s_connect="${s_connect:0:32}..."
         [ ${#s_domain} -gt 30 ]  && s_domain="${s_domain:0:27}..."
@@ -350,7 +350,7 @@ menu() {
         s_relay=$(getRelayStatus)
         s_psiphon=$(getPsiphonStatus)
         s_tor=$(getTorStatus)
-        s_connect=$(cat "$CONNECT_HOST_FILE" 2>/dev/null | tr -d '[:space:]')
+        s_connect=$(cat "$CONNECT_HOST_FILE" | tr -d '[:space:]')
         [ ${#s_connect} -gt 35 ] && s_connect="${s_connect:0:32}..."
         # Чистые версии (без ANSI) для printf %-Ns выравнивания
         _strip() { printf '%s' "$1" | sed 's/\[[0-9;]*[mABCDJKHf]//g; s/(B//g'; }
@@ -452,13 +452,13 @@ menu() {
             16) toggleIPv6 ;;
             17) setupCpuGuard ;;
             18) manageAdblock ;;
-            19) tail -n 80 /var/log/xray/access.log 2>/dev/null || echo "$(msg no_logs)" ;;
-            20) tail -n 80 /var/log/xray/error.log 2>/dev/null || echo "$(msg no_logs)" ;;
-            21) tail -n 80 /var/log/nginx/access.log 2>/dev/null || echo "$(msg no_logs)" ;;
-            22) tail -n 80 /var/log/nginx/error.log 2>/dev/null || echo "$(msg no_logs)" ;;
+            19) tail -n 80 /var/log/xray/access.log || echo "$(msg no_logs)" ;;
+            20) tail -n 80 /var/log/xray/error.log || echo "$(msg no_logs)" ;;
+            21) tail -n 80 /var/log/nginx/access.log || echo "$(msg no_logs)" ;;
+            22) tail -n 80 /var/log/nginx/error.log || echo "$(msg no_logs)" ;;
             23) clearLogs ;;
             24) managePrivacy ;;
-            25) systemctl restart xray xray-reality xray-vision xray-xhttp nginx warp-svc psiphon tor 2>/dev/null || true
+            25) systemctl restart xray xray-reality xray-vision xray-xhttp nginx warp-svc psiphon tor || true
                 echo "${green}$(msg all_services_restarted)${reset}" ;;
             26) updateXrayCore ;;
             27) rebuildAllConfigs ;;

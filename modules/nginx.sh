@@ -12,7 +12,7 @@ VWN_CONFIG_DIR="${VWN_CONFIG_DIR:-/usr/local/lib/vwn/config}"
 _getCountryCode() {
     local ip="$1"
     local code
-    code=$(curl -s --connect-timeout 5 "http://ip-api.com/line/${ip}?fields=countryCode" 2>/dev/null | tr -d '[:space:]')
+    code=$(curl -s --connect-timeout 5 "http://ip-api.com/line/${ip}?fields=countryCode" | tr -d '[:space:]')
     if [[ "$code" =~ ^[A-Z]{2}$ ]]; then
         echo "[$code]"
     else
@@ -26,7 +26,7 @@ setNginxCert() {
         openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
             -keyout /etc/nginx/cert/default.key \
             -out /etc/nginx/cert/default.crt \
-            -subj "/CN=localhost" &>/dev/null
+            -subj "/CN=localhost"
     fi
 }
 
@@ -66,7 +66,7 @@ writeNginxConfigVision() {
     local proxy_host wsPath
     proxy_host=$(echo "$proxyUrl" | sed 's|https://||;s|http://||;s|/.*||')
     # wsPath берётся из уже записанного xray конфига (xhttp или ws)
-    wsPath=$(jq -r '.inbounds[0].streamSettings.xhttpSettings.path // .inbounds[0].streamSettings.wsSettings.path // ""' "$configPath" 2>/dev/null)
+    wsPath=$(jq -r '.inbounds[0].streamSettings.xhttpSettings.path // .inbounds[0].streamSettings.wsSettings.path // ""' "$configPath")
 
     setNginxCert
 
@@ -93,7 +93,7 @@ writeNginxConfigVision() {
 
 _writeSubMapConf() {
     local server_ip country_code
-    server_ip=$(getServerIP 2>/dev/null || curl -s --connect-timeout 5 ifconfig.me)
+    server_ip=$(getServerIP || curl -s --connect-timeout 5 ifconfig.me)
     country_code=$(_getCountryCode "$server_ip")
     render_config "$VWN_CONFIG_DIR/sub_map.conf" /etc/nginx/conf.d/sub_map.conf \
         COUNTRY "$country_code"
@@ -109,7 +109,7 @@ setupRealIpRestore() {
     local ok=0
     for t in v4 v6; do
         local result
-        result=$(curl -fsSL --connect-timeout 10 "https://www.cloudflare.com/ips-$t" 2>/dev/null) || continue
+        result=$(curl -fsSL --connect-timeout 10 "https://www.cloudflare.com/ips-$t") || continue
         while IFS= read -r ip; do
             [ -z "$ip" ] && continue
             echo "set_real_ip_from $ip;" >> "$tmp"
@@ -134,7 +134,7 @@ _manageSubAuth() {
     echo ""
     echo "${cyan}=== $(msg sub_auth_manage) ===${reset}"
     local auth_active=false
-    grep -q "auth_basic" "$nginxPath" 2>/dev/null && auth_active=true
+    grep -q "auth_basic" "$nginxPath" && auth_active=true
     local cur_user cur_pass
     cur_user=$(vwn_conf_get SUB_AUTH_USER)
     cur_pass=$(vwn_conf_get SUB_AUTH_PASS)
@@ -171,9 +171,9 @@ _manageSubAuth() {
 
 _subAuthEnable() {
     _subAuthSetCredentials || return 1
-    if ! grep -q "auth_basic" "$nginxPath" 2>/dev/null; then
+    if ! grep -q "auth_basic" "$nginxPath"; then
         sed -i '/location ~ \^\/sub\//,/}/ { /}/i\        auth_basic           "Restricted";\n        auth_basic_user_file /etc/nginx/conf.d/.htpasswd;
-}' "$nginxPath" 2>/dev/null || true
+}' "$nginxPath" || true
     fi
     nginx -t && systemctl reload nginx
     echo "${green}$(msg sub_auth_enabled): ${cyan}$(vwn_conf_get SUB_AUTH_USER)${reset} / ${cyan}$(vwn_conf_get SUB_AUTH_PASS)${reset}"
@@ -183,7 +183,7 @@ _subAuthDisable() {
     echo "${yellow}$(msg sub_auth_disable_confirm) $(msg yes_no)${reset}"
     read -r confirm
     [[ "$confirm" != "y" ]] && return
-    sed -i '/auth_basic/d' "$nginxPath" 2>/dev/null || true
+    sed -i '/auth_basic/d' "$nginxPath" || true
     rm -f /etc/nginx/conf.d/.htpasswd
     vwn_conf_del SUB_AUTH_USER
     vwn_conf_del SUB_AUTH_PASS
@@ -203,11 +203,11 @@ _subAuthSetCredentials() {
 import crypt, sys
 u, p = sys.argv[1], sys.argv[2]
 print(u + ':' + crypt.crypt(p, crypt.mksalt(crypt.METHOD_SHA512)))
-" "$new_user" "$new_pass" 2>/dev/null)
+" "$new_user" "$new_pass")
     if [ -n "$hashed" ]; then
         echo "$hashed" > /etc/nginx/conf.d/.htpasswd
         chmod 640 /etc/nginx/conf.d/.htpasswd
-        chown root:www-data /etc/nginx/conf.d/.htpasswd 2>/dev/null || true
+        chown root:www-data /etc/nginx/conf.d/.htpasswd || true
     fi
     vwn_conf_set SUB_AUTH_USER "$new_user"
     vwn_conf_set SUB_AUTH_PASS "$new_pass"
@@ -221,7 +221,7 @@ _fetchCfGuardIPs() {
     local ok=0
     for t in v4 v6; do
         local result
-        result=$(curl -fsSL --connect-timeout 10 "https://www.cloudflare.com/ips-$t" 2>/dev/null) || continue
+        result=$(curl -fsSL --connect-timeout 10 "https://www.cloudflare.com/ips-$t") || continue
         while IFS= read -r ip; do
             [ -z "$ip" ] && continue
             echo "    $ip 1;" >> "$tmp"
@@ -241,17 +241,17 @@ toggleCfGuard() {
         read -r confirm
         if [[ "$confirm" == "y" ]]; then
             rm -f /etc/nginx/conf.d/cf_guard.conf
-            sed -i '/cloudflare_ip.*!=.*1/d' "$nginxPath" 2>/dev/null || true
+            sed -i '/cloudflare_ip.*!=.*1/d' "$nginxPath" || true
             nginx -t && systemctl reload nginx
             echo "${green}$(msg cfguard_disabled)${reset}"
         fi
     else
         _fetchCfGuardIPs || return 1
         local wsPath
-        wsPath=$(jq -r ".inbounds[0].streamSettings.wsSettings.path" "$configPath" 2>/dev/null)
+        wsPath=$(jq -r ".inbounds[0].streamSettings.wsSettings.path" "$configPath")
         if [ -n "$wsPath" ] && [ "$wsPath" != "null" ]; then
-            if ! grep -q "cloudflare_ip" "$nginxPath" 2>/dev/null; then
-                sed -i "s/\(\s*location ${wsPath//\//\\/} {)/    if (\$cloudflare_ip != 1) { return 444; }\n\n\1/" "$nginxPath" 2>/dev/null || true
+            if ! grep -q "cloudflare_ip" "$nginxPath"; then
+                sed -i "s/\(\s*location ${wsPath//\//\\/} {)/    if (\$cloudflare_ip != 1) { return 444; }\n\n\1/" "$nginxPath" || true
             fi
         fi
         nginx -t || { echo "${red}$(msg nginx_syntax_err)${reset}"; return 1; }
@@ -283,13 +283,13 @@ configCert() {
         local expire_date expire_epoch now_epoch days_left domain_in_cert
         
         # Срок действия
-        expire_date=$(openssl x509 -enddate -noout -in /etc/nginx/cert/cert.pem 2>/dev/null | cut -d= -f2)
-        expire_epoch=$(date -d "$expire_date" +%s 2>/dev/null)
+        expire_date=$(openssl x509 -enddate -noout -in /etc/nginx/cert/cert.pem | cut -d= -f2)
+        expire_epoch=$(date -d "$expire_date" +%s)
         now_epoch=$(date +%s)
         days_left=$(( (expire_epoch - now_epoch) / 86400 ))
         
         # Домен в сертификате
-        domain_in_cert=$(openssl x509 -noout -text -in /etc/nginx/cert/cert.pem 2>/dev/null | grep -oP '(?<=DNS:)[^,\s]+' | head -1)
+        domain_in_cert=$(openssl x509 -noout -text -in /etc/nginx/cert/cert.pem | grep -oP '(?<=DNS:)[^,\s]+' | head -1)
         
         # Если сертификат валиден и для нужного домена
         if [ -n "$expire_epoch" ] && [ "$days_left" -gt 15 ] && [ "$domain_in_cert" = "$userDomain" ]; then
@@ -340,7 +340,7 @@ configCert() {
 
     # Даём пользователю xray доступ к cert.key — нужно для xray-vision
     chmod 640 /etc/nginx/cert/cert.key
-    chown root:xray /etc/nginx/cert/cert.key 2>/dev/null || true
+    chown root:xray /etc/nginx/cert/cert.key || true
 
     echo "${green}$(msg ssl_success) $userDomain${reset}"
 }
@@ -349,7 +349,7 @@ applyNginxSub() {
     [ ! -f "$nginxPath" ] && return 1
     _writeSubMapConf
     if ! grep -q 'location ~ \^/sub/' "$nginxPath"; then
-        sed -i '/location \/ {/i\    location ~ ^/sub/[A-Za-z0-9_-]+_[A-Za-z0-9]+\\.html$ {\n        root /usr/local/etc/xray;\n        try_files $uri =404;\n        types { text/html html; }\n        add_header Cache-Control '\''no-cache, no-store, must-revalidate'\'';\n    }\n\n    location ~ ^/sub/[A-Za-z0-9_-]+_[A-Za-z0-9]+\\.txt$ {\n        root /usr/local/etc/xray;\n        try_files $uri =404;\n        default_type text/plain;\n        add_header Content-Disposition "attachment; filename=\\"$sub_label.txt\\"";\n        add_header profile-title "$sub_label";\n        add_header Cache-Control '\''no-cache, no-store, must-revalidate'\'';\n    }\n' "$nginxPath" 2>/dev/null || true
+        sed -i '/location \/ {/i\    location ~ ^/sub/[A-Za-z0-9_-]+_[A-Za-z0-9]+\\.html$ {\n        root /usr/local/etc/xray;\n        try_files $uri =404;\n        types { text/html html; }\n        add_header Cache-Control '\''no-cache, no-store, must-revalidate'\'';\n    }\n\n    location ~ ^/sub/[A-Za-z0-9_-]+_[A-Za-z0-9]+\\.txt$ {\n        root /usr/local/etc/xray;\n        try_files $uri =404;\n        default_type text/plain;\n        add_header Content-Disposition "attachment; filename=\\"$sub_label.txt\\"";\n        add_header profile-title "$sub_label";\n        add_header Cache-Control '\''no-cache, no-store, must-revalidate'\'';\n    }\n' "$nginxPath" || true
     fi
     nginx -t && systemctl reload nginx
 }

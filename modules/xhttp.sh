@@ -15,10 +15,10 @@ xhttpConfigPath="/usr/local/etc/xray/xhttp.json"
 
 _ensureXhttpLogAccess() {
     mkdir -p /var/log/xray
-    touch /var/log/xray/xhttp-error.log 2>/dev/null || true
-    chown -R xray:xray /var/log/xray 2>/dev/null || true
-    chmod 750 /var/log/xray 2>/dev/null || true
-    chmod 640 /var/log/xray/xhttp-error.log 2>/dev/null || true
+    touch /var/log/xray/xhttp-error.log || true
+    chown -R xray:xray /var/log/xray || true
+    chmod 750 /var/log/xray || true
+    chmod 640 /var/log/xray/xhttp-error.log || true
 }
 
 # ── Статус ────────────────────────────────────────────────────────
@@ -28,9 +28,9 @@ getXhttpStatus() {
         echo "${red}NOT INSTALLED${reset}"
         return
     fi
-    if systemctl is-active --quiet xray-xhttp 2>/dev/null; then
+    if systemctl is-active --quiet xray-xhttp; then
         local domain
-        domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
+        domain=$(vwn_conf_get DOMAIN || true)
         echo "${green}RUNNING${reset} | ${domain:-?}:443/xhttp (CDN mode)"
     else
         echo "${red}STOPPED${reset}"
@@ -52,8 +52,8 @@ writeXhttpConfig() {
         PATH "$path" \
         DOMAIN "$domain"
 
-    chown xray:xray "$xhttpConfigPath" 2>/dev/null || true
-    chmod 640 "$xhttpConfigPath" 2>/dev/null || true
+    chown xray:xray "$xhttpConfigPath" || true
+    chmod 640 "$xhttpConfigPath" || true
     echo "${green}XHTTP config written: $xhttpConfigPath${reset}"
 }
 
@@ -98,29 +98,29 @@ _xhttpApplyActiveFeatures() {
     echo -e "${cyan}Applying active features to XHTTP config${reset}"
 
     # WARP
-    if command -v warp-cli &>/dev/null; then
+    if command -v warp-cli; then
         local warp_raw warp_rule
-        warp_raw=$(getWarpStatusRaw 2>/dev/null || echo "OFF")
+        warp_raw=$(getWarpStatusRaw || echo "OFF")
         if [ "$warp_raw" = "ACTIVE" ] && [ -f "$configPath" ]; then
-            warp_rule=$(jq -r '.routing.rules[] | select(.outboundTag=="warp") | if .port == "0-65535" then "Global" elif (.domain | length) > 0 then "Split" else "" end' "$configPath" 2>/dev/null | head -1)
+            warp_rule=$(jq -r '.routing.rules[] | select(.outboundTag=="warp") | if .port == "0-65535" then "Global" elif (.domain | length) > 0 then "Split" else "" end' "$configPath" | head -1)
             case "$warp_rule" in
                 Global)
                     jq '(.routing.rules[] | select(.outboundTag == "warp")) |= (.port = "0-65535" | del(.domain))' \
-                        "$xhttpConfigPath" > "${xhttpConfigPath}.tmp" && mv "${xhttpConfigPath}.tmp" "$xhttpConfigPath" 2>/dev/null || true
+                        "$xhttpConfigPath" > "${xhttpConfigPath}.tmp" && mv "${xhttpConfigPath}.tmp" "$xhttpConfigPath" || true
                     ;;
-                Split) applyWarpDomains 2>/dev/null || true ;;
+                Split) applyWarpDomains || true ;;
             esac
         fi
     fi
 
     # Adblock
-    if _adblockIsEnabled 2>/dev/null; then
-        _adblockApplyToConfig "$xhttpConfigPath" 2>/dev/null || true
+    if _adblockIsEnabled; then
+        _adblockApplyToConfig "$xhttpConfigPath" || true
     fi
 
     # Privacy mode
-    if _privacyIsEnabled 2>/dev/null; then
-        _xrayDisableLog "$xhttpConfigPath" 2>/dev/null || true
+    if _privacyIsEnabled; then
+        _xrayDisableLog "$xhttpConfigPath" || true
     fi
 }
 
@@ -144,8 +144,8 @@ installXhttp() {
 
     # Домен и UUID из существующего Vision
     local xhttp_domain xhttp_uuid xhttp_path
-    xhttp_domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
-    xhttp_uuid=$(vwn_conf_get VISION_UUID 2>/dev/null || true)
+    xhttp_domain=$(vwn_conf_get DOMAIN || true)
+    xhttp_uuid=$(vwn_conf_get VISION_UUID || true)
     
     # Генерируем уникальный путь как у WebSocket
     xhttp_path="/api/v2/$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)"
@@ -160,7 +160,7 @@ installXhttp() {
 
     # Обновляем Nginx конфиг — добавляем location для XHTTP
     local proxy_url
-    proxy_url=$(vwn_conf_get STUB_URL 2>/dev/null || echo "https://www.bing.com/")
+    proxy_url=$(vwn_conf_get STUB_URL || echo "https://www.bing.com/")
     writeNginxConfigVision "$proxy_url" "$xhttp_domain"
 
     # Сервис
@@ -181,7 +181,7 @@ installXhttp() {
     showXhttpInfo
 
     # Перегенерируем подписки
-    rebuildAllSubFiles 2>/dev/null || true
+    rebuildAllSubFiles || true
 }
 
 # ── Информация ────────────────────────────────────────────────────
@@ -193,10 +193,10 @@ showXhttpInfo() {
     fi
 
     local domain uuid server_ip path
-    domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
-    uuid=$(vwn_conf_get VISION_UUID 2>/dev/null || true)
+    domain=$(vwn_conf_get DOMAIN || true)
+    uuid=$(vwn_conf_get VISION_UUID || true)
     server_ip=$(getServerIP)
-    path=$(vwn_conf_get XHTTP_PATH 2>/dev/null || echo "/xhttp")
+    path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
 
     echo ""
     echo -e "${cyan}━━━ Vision XHTTP (CDN) ━━━${reset}"
@@ -221,29 +221,29 @@ showXhttpQR() {
     fi
 
     local domain uuid path
-    domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
-    uuid=$(vwn_conf_get VISION_UUID 2>/dev/null || true)
-    path=$(vwn_conf_get XHTTP_PATH 2>/dev/null || echo "/xhttp")
+    domain=$(vwn_conf_get DOMAIN || true)
+    uuid=$(vwn_conf_get VISION_UUID || true)
+    path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
 
     [ -z "$domain" ] || [ -z "$uuid" ] && {
         echo "${red}XHTTP не установлен${reset}"; return
     }
 
     local flag server_ip v_label v_name v_encoded_name modes
-    server_ip=$(getServerIP 2>/dev/null || echo "")
-    flag=$(_getCountryFlag "$server_ip" 2>/dev/null || echo "🌐")
-    modes=$(_getActiveModesSuffix 2>/dev/null || true)
+    server_ip=$(getServerIP || echo "")
+    flag=$(_getCountryFlag "$server_ip" || echo "🌐")
+    modes=$(_getActiveModesSuffix || true)
     v_label="default"
     [ -f "$USERS_FILE" ] && v_label=$(cut -d'|' -f2 "$USERS_FILE" | head -1)
     v_name="${flag} VL-XHTTP | ${v_label} ${flag}${modes}"
-    v_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$v_name" 2>/dev/null || echo "$v_name")
+    v_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$v_name" || echo "$v_name")
 
     local link
     link="vless://${uuid}@${domain}:443?security=tls&type=xhttp&path=${path}&sni=${domain}&fp=chrome&allowInsecure=0#${v_encoded_name}"
 
     echo -e "${cyan}Vision XHTTP ссылка:${reset}"
     echo ""
-    if command -v qrencode &>/dev/null; then
+    if command -v qrencode; then
         qrencode -t ANSIUTF8 "$link"
     fi
     echo ""
@@ -260,8 +260,8 @@ removeXhttp() {
 
     echo -e "${cyan}Удаление XHTTP...${reset}"
 
-    systemctl stop xray-xhttp 2>/dev/null || true
-    systemctl disable xray-xhttp 2>/dev/null || true
+    systemctl stop xray-xhttp || true
+    systemctl disable xray-xhttp || true
     rm -f "$XHTTP_SERVICE"
     systemctl daemon-reload
 
@@ -272,14 +272,14 @@ removeXhttp() {
 
     # Пересобираем Nginx конфиг без XHTTP
     local proxy_url domain
-    proxy_url=$(vwn_conf_get STUB_URL 2>/dev/null || echo "https://www.bing.com/")
-    domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
+    proxy_url=$(vwn_conf_get STUB_URL || echo "https://www.bing.com/")
+    domain=$(vwn_conf_get DOMAIN || true)
     writeNginxConfigVision "$proxy_url" "$domain"
 
-    nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || true
+    nginx -t && systemctl reload nginx || true
 
     # Перегенерируем подписки
-    rebuildAllSubFiles 2>/dev/null || true
+    rebuildAllSubFiles || true
 
     echo "${green}XHTTP удалён${reset}"
 }
@@ -292,16 +292,16 @@ rebuildXhttpConfigs() {
     fi
 
     local xhttp_uuid xhttp_path xhttp_domain
-    xhttp_uuid=$(vwn_conf_get VISION_UUID 2>/dev/null || true)
-    xhttp_path=$(vwn_conf_get XHTTP_PATH 2>/dev/null || echo "/xhttp")
-    xhttp_domain=$(vwn_conf_get DOMAIN 2>/dev/null || true)
+    xhttp_uuid=$(vwn_conf_get VISION_UUID || true)
+    xhttp_path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
+    xhttp_domain=$(vwn_conf_get DOMAIN || true)
 
     echo -e "${cyan}Rebuilding XHTTP configs...${reset}"
 
     writeXhttpConfig "$xhttp_uuid" "$xhttp_path" "$xhttp_domain"
     _xhttpApplyActiveFeatures
 
-    systemctl restart xray-xhttp 2>/dev/null || true
+    systemctl restart xray-xhttp || true
 
     echo "${green}XHTTP конфиги пересозданы${reset}"
 }
@@ -318,8 +318,8 @@ manageXhttp() {
         echo -e "  Статус: $(getXhttpStatus)"
         if [ -f "$xhttpConfigPath" ]; then
             local _dom _path
-            _dom=$(vwn_conf_get DOMAIN 2>/dev/null || true)
-            _path=$(vwn_conf_get XHTTP_PATH 2>/dev/null || echo "/xhttp")
+            _dom=$(vwn_conf_get DOMAIN || true)
+            _path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
             echo -e "  Домен: ${green}${_dom:-?}${reset}"
             echo -e "  Путь:  ${green}${_path}${reset}"
         fi

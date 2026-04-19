@@ -15,7 +15,7 @@ edit_json() {
     trap 'rm -f "$tmp"' RETURN
 
     if jq "$filter" "$@" "$file" > "$tmp"; then
-        if jq . "$tmp" &>/dev/null; then
+        if jq . "$tmp"; then
             cat "$tmp" > "$file"
             return 0
         fi
@@ -74,12 +74,12 @@ rebuildAllConfigs() {
     }
 
     echo -e "${cyan}Rebuilding subscription files...${reset}"
-    rebuildAllSubFiles 2>/dev/null || true
+    rebuildAllSubFiles || true
 
     echo "${green}All configs rebuilt successfully.${reset}"
 }
 
-VWN_VERSION="1.0"
+VWN_VERSION="3.1"
 VWN_LIB="/usr/local/lib/vwn"
 
 # Цвета
@@ -126,7 +126,7 @@ Cache=yes
 DNSOverTLS=no
 DNSCONF
 
-        systemctl restart systemd-resolved 2>/dev/null || true
+        systemctl restart systemd-resolved || true
         
         echo "✅ system DNS set successfully, DHCP DNS blocked"
         return 0
@@ -135,7 +135,7 @@ DNSCONF
     # Только если systemd-resolved НЕ установлен и не работает
     echo "info: no systemd-resolved, writing direct resolv.conf"
     
-    chattr -i "$resolv_conf" 2>/dev/null
+    chattr -i "$resolv_conf"
     
     # ✅ Полностью перезаписываем но НЕ ТРОГАЕМ СИМЛИНК
     cat > "$resolv_conf" << RESOLVEOF
@@ -155,7 +155,7 @@ RESOLVEOF
 }
 
 unlockSystemDNS() {
-    chattr -i /etc/resolv.conf 2>/dev/null || true
+    chattr -i /etc/resolv.conf || true
 }
 psiphonConfigFile='/usr/local/etc/xray/psiphon.json'
 psiphonBin='/usr/local/bin/psiphon-tunnel-core'
@@ -172,14 +172,14 @@ export USERS_FILE
 
 vwn_conf_get() {
     local key="$1"
-    grep "^${key}=" "$VWN_CONF" 2>/dev/null | cut -d= -f2-
+    grep "^${key}=" "$VWN_CONF" | cut -d= -f2-
 }
 
 vwn_conf_set() {
     local key="$1" val="$2"
     mkdir -p "$(dirname "$VWN_CONF")"
     touch "$VWN_CONF"
-    if grep -q "^${key}=" "$VWN_CONF" 2>/dev/null; then
+    if grep -q "^${key}=" "$VWN_CONF"; then
         sed -i "s|^${key}=.*|${key}=${val}|" "$VWN_CONF"
     else
         echo "${key}=${val}" >> "$VWN_CONF"
@@ -188,7 +188,7 @@ vwn_conf_set() {
 
 vwn_conf_del() {
     local key="$1"
-    sed -i "/^${key}=/d" "$VWN_CONF" 2>/dev/null || true
+    sed -i "/^${key}=/d" "$VWN_CONF" || true
 }
 
 # ============================================================
@@ -196,7 +196,7 @@ vwn_conf_del() {
 # ============================================================
 
 create_xray_user() {
-    if ! id xray &>/dev/null; then
+    if ! id xray; then
         useradd -r -s /sbin/nologin -d /usr/local/etc/xray xray
         echo "info: user xray created."
     fi
@@ -204,10 +204,10 @@ create_xray_user() {
 
 setup_xray_logs() {
     mkdir -p /var/log/xray
-    chown -R xray:xray /var/log/xray 2>/dev/null || true
+    chown -R xray:xray /var/log/xray || true
     chmod 750 /var/log/xray
     touch /var/log/xray/error.log /var/log/xray/access.log
-    chown xray:xray /var/log/xray/*.log 2>/dev/null || true
+    chown xray:xray /var/log/xray/*.log || true
 }
 
 fix_xray_service() {
@@ -230,7 +230,7 @@ view_log() {
         tail -n 50 "$file"
     else
         if [ -n "$service" ]; then
-            journalctl -u "$service" -n 50 --no-pager 2>/dev/null || echo "$(msg no_logs)"
+            journalctl -u "$service" -n 50 --no-pager || echo "$(msg no_logs)"
         else
             echo "$(msg no_logs)"
         fi
@@ -250,10 +250,10 @@ isRoot() {
 
 prepareApt() {
     # Убиваем все зависшие процессы пакетного менеджера
-    killall -9 apt apt-get dpkg dpkg-deb unattended-upgrades 2>/dev/null || true
+    killall -9 apt apt-get dpkg dpkg-deb unattended-upgrades || true
     
     # Принудительно снимаем блокировки файлов
-    fuser -kk /var/lib/dpkg/lock* /var/cache/apt/archives/lock /var/lib/apt/lists/lock* 2>/dev/null || true
+    fuser -kk /var/lib/dpkg/lock* /var/cache/apt/archives/lock /var/lib/apt/lists/lock* || true
     sleep 0.5
     
     # Удаляем файлы блокировок
@@ -261,7 +261,7 @@ prepareApt() {
     
     # Исправляем сломанное состояние dpkg
     export DEBIAN_FRONTEND=noninteractive
-    dpkg --configure -a --force-confold --force-confdef 2>/dev/null || true
+    dpkg --configure -a --force-confold --force-confdef || true
 }
 
 identifyOS() {
@@ -269,20 +269,20 @@ identifyOS() {
         echo "error: This operating system is not supported."
         exit 1
     fi
-    if command -v apt &>/dev/null; then
+    if command -v apt; then
         PACKAGE_MANAGEMENT_INSTALL='apt-get -y --no-install-recommends -o Dpkg::Lock::Timeout=120 -o Acquire::http::Timeout=60 -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install'
         PACKAGE_MANAGEMENT_REMOVE='apt purge -y'
         PACKAGE_MANAGEMENT_UPDATE='apt-get update -o Acquire::http::Timeout=60'
-    elif command -v dnf &>/dev/null; then
+    elif command -v dnf; then
         PACKAGE_MANAGEMENT_INSTALL='dnf -y install --setopt=install_weak_deps=False'
         PACKAGE_MANAGEMENT_REMOVE='dnf remove -y'
         PACKAGE_MANAGEMENT_UPDATE='dnf update'
-        ${PACKAGE_MANAGEMENT_INSTALL} 'epel-release' &>/dev/null
-    elif command -v yum &>/dev/null; then
+        ${PACKAGE_MANAGEMENT_INSTALL} 'epel-release'
+    elif command -v yum; then
         PACKAGE_MANAGEMENT_INSTALL='yum -y install --setopt=install_weak_deps=False'
         PACKAGE_MANAGEMENT_REMOVE='yum remove -y'
         PACKAGE_MANAGEMENT_UPDATE='yum update'
-        ${PACKAGE_MANAGEMENT_INSTALL} 'epel-release' &>/dev/null
+        ${PACKAGE_MANAGEMENT_INSTALL} 'epel-release'
     else
         echo "error: Package manager not supported."
         exit 1
@@ -295,14 +295,14 @@ installPackage() {
     echo -n "  ${pkg}... "
 
     # Пропускаем уже установленные пакеты без вызова apt
-    if dpkg -s "$pkg" &>/dev/null && dpkg -s "$pkg" 2>/dev/null | grep -q "^Status: install ok installed"; then
+    if dpkg -s "$pkg" && dpkg -s "$pkg" | grep -q "^Status: install ok installed"; then
         echo "${green}SKIP${reset}"
         return 0
     fi
 
     export DEBIAN_FRONTEND=noninteractive
-    # Используем PACKAGE_MANAGEMENT_INSTALL напрямую
-    if ${PACKAGE_MANAGEMENT_INSTALL} "$pkg" >/dev/null 2>&1; then
+    # eval нужен: PACKAGE_MANAGEMENT_INSTALL содержит экранированные кавычки
+    if eval "$PACKAGE_MANAGEMENT_INSTALL '$pkg'"; then
         echo "${green}OK${reset}"
         return 0
     fi
@@ -310,9 +310,9 @@ installPackage() {
     # При ошибке — чиним apt и пробуем ещё раз
     echo "${yellow}RETRY${reset}"
     prepareApt
-    ${PACKAGE_MANAGEMENT_UPDATE} >/dev/null 2>&1 || true
+    eval "${PACKAGE_MANAGEMENT_UPDATE}" || true
 
-    if ${PACKAGE_MANAGEMENT_INSTALL} "$pkg" >/dev/null 2>&1; then
+    if eval "$PACKAGE_MANAGEMENT_INSTALL '$pkg'"; then
         echo "${green}OK (retry)${reset}"
         return 0
     else
@@ -337,7 +337,7 @@ run_task() {
 }
 
 setupAlias() {
-    ln -sf "$VWN_LIB/../bin/vwn" /usr/local/bin/vwn 2>/dev/null || true
+    ln -sf "$VWN_LIB/../bin/vwn" /usr/local/bin/vwn || true
 }
 
 # Загрузка всех модулей системы
@@ -379,17 +379,17 @@ setupSwap() {
     # Создаём swap-файл
     local swapfile="/swapfile"
 
-    if fallocate -l "${swap_mb}M" "$swapfile" 2>/dev/null || \
+    if fallocate -l "${swap_mb}M" "$swapfile" || \
        dd if=/dev/zero of="$swapfile" bs=1M count="$swap_mb" status=none; then
         chmod 600 "$swapfile"
-        mkswap "$swapfile" &>/dev/null
+        mkswap "$swapfile"
         swapon "$swapfile" || true
         # Прописываем в fstab чтобы swap выжил после перезагрузки
         if ! grep -q "$swapfile" /etc/fstab; then
             echo "$swapfile none swap sw 0 0" >> /etc/fstab
         fi
         # Настраиваем swappiness — не злоупотреблять swap
-        sysctl -w vm.swappiness=10 &>/dev/null
+        sysctl -w vm.swappiness=10
         grep -q "vm.swappiness" /etc/sysctl.conf || echo "vm.swappiness=10" >> /etc/sysctl.conf
         echo "${green}$(msg swap_created) ${swap_mb}MB${reset}"
     else
@@ -401,7 +401,7 @@ findFreePort() {
     local start="${1:-20000}" end="${2:-20999}"
     local port
     for port in $(seq "$start" "$end"); do
-        if ! ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+        if ! ss -tlnp | grep -q ":${port} "; then
             echo "$port"
             return 0
         fi
@@ -432,21 +432,21 @@ getServerIP() {
 
     local i
     for i in "${!urls[@]}"; do
-        (curl -s --max-time 3 "${urls[$i]}" > "$tmpdir/$i" 2>/dev/null) &
+        (curl -s --max-time 3 "${urls[$i]}" > "$tmpdir/$i") &
         pids+=($!)
     done
 
     # trap устанавливаем после заполнения pids
-    trap 'rm -rf "$tmpdir"; kill "${pids[@]}" 2>/dev/null' RETURN INT TERM
+    trap 'rm -rf "$tmpdir"; kill "${pids[@]}"' RETURN INT TERM
 
     local attempts=0
     while [ $attempts -lt 15 ]; do
         for f in "$tmpdir"/*; do
             [ -s "$f" ] || continue
             local ip
-            ip=$(cat "$f" 2>/dev/null | tr -d '[:space:]')
+            ip=$(cat "$f" | tr -d '[:space:]')
             if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && ! [[ "$ip" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.) ]]; then
-                kill "${pids[@]}" 2>/dev/null || true
+                kill "${pids[@]}" || true
                 echo "$ip"
                 return 0
             fi
@@ -456,9 +456,9 @@ getServerIP() {
     done
 
     # Fallback: локальный маршрут
-    kill "${pids[@]}" 2>/dev/null || true
+    kill "${pids[@]}" || true
     local ip
-    ip=$(ip route get 8.8.8.8 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')
+    ip=$(ip route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')
     echo "${ip:-UNKNOWN}"
 }
 
@@ -467,7 +467,7 @@ getServerIP() {
 # ============================================================
 
 getServiceStatus() {
-    if systemctl is-active --quiet "$1" 2>/dev/null; then
+    if systemctl is-active --quiet "$1"; then
         echo "${green}RUNNING${reset}"
     else
         echo "${red}STOPPED${reset}"
@@ -484,15 +484,15 @@ _getTunnelMode() {
              if .port == "0-65535" then "Global"
              elif (.domain | length) > 0 then "Split"
              else "OFF" end' \
-            "$configPath" 2>/dev/null | head -1)
+            "$configPath" | head -1)
     fi
     echo "${mode:-OFF}"
 }
 
 getWarpStatusRaw() {
-    if command -v warp-cli &>/dev/null; then
+    if command -v warp-cli; then
         local out
-        out=$(warp-cli --accept-tos status 2>/dev/null || warp-cli status 2>/dev/null)
+        out=$(warp-cli --accept-tos status || warp-cli status)
         echo "$out" | grep -q "Connected" && echo "ACTIVE" || echo "OFF"
     else
         echo "NOT_INSTALLED"
@@ -518,18 +518,18 @@ getWarpStatus() {
 }
 
 getBbrStatus() {
-    sysctl net.ipv4.tcp_congestion_control 2>/dev/null | grep -q "bbr" \
+    sysctl net.ipv4.tcp_congestion_control | grep -q "bbr" \
         && echo "${green}ON${reset}" || echo "${red}OFF${reset}"
 }
 
 getF2BStatus() {
-    systemctl is-active --quiet fail2ban 2>/dev/null \
+    systemctl is-active --quiet fail2ban \
         && echo "${green}ON${reset}" || echo "${red}OFF${reset}"
 }
 
 getWebJailStatus() {
     if [ -f /etc/fail2ban/filter.d/nginx-probe.conf ]; then
-        fail2ban-client status nginx-probe &>/dev/null \
+        fail2ban-client status nginx-probe \
             && echo "${green}PROTECTED${reset}" || echo "${yellow}OFF${reset}"
     else
         echo "${red}NO${reset}"
@@ -580,8 +580,8 @@ domainsToJson() {
         line="${line#.}"
         line=$(echo "$line" | tr -d '[:space:]')
         [ -z "$line" ] && continue
-        if echo "$line" | grep -qP '[^\x00-\x7F]' 2>/dev/null; then
-            line=$(L="$line" python3 -c "import os,encodings.idna; parts=os.environ['L'].split('.'); print('.'.join(encodings.idna.ToASCII(p).decode() for p in parts))" 2>/dev/null || echo "$line")
+        if echo "$line" | grep -qP '[^\x00-\x7F]'; then
+            line=$(L="$line" python3 -c "import os,encodings.idna; parts=os.environ['L'].split('.'); print('.'.join(encodings.idna.ToASCII(p).decode() for p in parts))" || echo "$line")
         fi
         [ -n "$result" ] && result="$result,"
         result="$result\"domain:$line\""

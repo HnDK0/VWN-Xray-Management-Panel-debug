@@ -150,7 +150,7 @@ setupFail2Ban() {
     echo -e "${cyan}$(msg f2b_setup)${reset}"
     [ -z "${PACKAGE_MANAGEMENT_INSTALL:-}" ] && identifyOS
 
-    ${PACKAGE_MANAGEMENT_INSTALL} "fail2ban"
+    installPackage "fail2ban" || return 1
     mkdir -p /etc/fail2ban
 
     local ban_action="iptables-multiport"

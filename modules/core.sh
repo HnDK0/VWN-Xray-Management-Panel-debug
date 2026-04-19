@@ -437,7 +437,7 @@ getServerIP() {
     done
 
     # trap устанавливаем после заполнения pids
-    trap 'rm -rf "$tmpdir"; kill "${pids[@]}"' RETURN INT TERM
+    trap 'rm -rf "$tmpdir"; kill "${pids[@]}" 2>/dev/null' RETURN INT TERM
 
     local attempts=0
     while [ $attempts -lt 15 ]; do
@@ -446,7 +446,7 @@ getServerIP() {
             local ip
             ip=$(cat "$f" | tr -d '[:space:]')
             if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && ! [[ "$ip" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.) ]]; then
-                kill "${pids[@]}" || true
+                kill "${pids[@]}" 2>/dev/null || true
                 echo "$ip"
                 return 0
             fi
@@ -456,7 +456,7 @@ getServerIP() {
     done
 
     # Fallback: локальный маршрут
-    kill "${pids[@]}" || true
+    kill "${pids[@]}" 2>/dev/null || true
     local ip
     ip=$(ip route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}')
     echo "${ip:-UNKNOWN}"

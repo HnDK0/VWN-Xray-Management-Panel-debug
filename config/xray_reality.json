@@ -4,14 +4,9 @@
         "error": "/var/log/xray/reality-error.log"
     },
     "dns": {
-        "servers": [
-            {
-                "address": "https://9.9.9.9/dns-query",
-                "port": 443
-            }
-        ],
-        "queryStrategy": "UseIPv4"
-    },
+    "servers": ["127.0.0.53", "1.1.1.1"],
+    "queryStrategy": "UseIPv4"
+  },
     "inbounds": [{
         "port": __PORT__,
         "listen": "0.0.0.0",

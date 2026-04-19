@@ -265,16 +265,11 @@ removeFail2Ban() {
 reinstallFail2Ban() {
     echo -e "${cyan}Reinstalling Fail2Ban...${reset}"
 
-    # Сначала удаляем текущую версию
+    # Останавливаем сервис
     systemctl stop fail2ban 2>/dev/null || true
     systemctl disable fail2ban 2>/dev/null || true
 
-    # Очищаем конфиги
-    rm -f /etc/fail2ban/jail.local
-    rm -f /etc/fail2ban/filter.d/nginx-probe.conf
-    rm -rf /var/lib/fail2ban 2>/dev/null || true
-
-    # Очищаем правила fail2ban из всех доступных бэкендов
+    # Очищаем iptables правила
     if command -v iptables &>/dev/null; then
         for chain in $(iptables -L -n 2>/dev/null | grep "f2b" | awk '{print $2}' | sort -u); do
             iptables -F "$chain" 2>/dev/null || true
@@ -282,12 +277,17 @@ reinstallFail2Ban() {
         done
     fi
 
-    # Очищаем nftables правила если они есть
-    if command -v nft &>/dev/null; then
-        nft list ruleset 2>/dev/null | grep -q 'f2b-' && nft flush ruleset inet f2b 2>/dev/null || true
-    fi
+    # Удаляем пакет полностью — чтобы installPackage не сделал SKIP
+    apt-get purge -y fail2ban &>/dev/null || true
+    apt-get autoremove -y &>/dev/null || true
 
-    # Пересоздаём с нуля
+    # Удаляем остатки конфигов и данных
+    rm -f /etc/fail2ban/jail.local
+    rm -f /etc/fail2ban/filter.d/nginx-probe.conf
+    rm -rf /var/lib/fail2ban 2>/dev/null || true
+    rm -f /var/run/fail2ban/fail2ban.sock 2>/dev/null || true
+
+    # Переустанавливаем с нуля
     setupFail2Ban
     if systemctl is-active --quiet fail2ban 2>/dev/null; then
         echo "${green}$(msg f2b_reinstalled)${reset}"

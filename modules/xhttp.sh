@@ -186,17 +186,17 @@ installXhttp() {
         return 1
     }
 
+    # Сохраняем мета-данные до запуска сервиса — чтобы данные были даже при частичной ошибке
+    vwn_conf_set XHTTP_ENABLED "true"
+    vwn_conf_set XHTTP_UUID    "$xhttp_uuid"
+    vwn_conf_set XHTTP_PATH    "$xhttp_path"
+    vwn_conf_set XHTTP_LPORT   "$xhttp_lport"
+
     # Сервис
     setupXhttpService || return 1
 
     # Применяем активные фичи
     _xhttpApplyActiveFeatures
-
-    # Сохраняем мета-данные
-    vwn_conf_set XHTTP_ENABLED "true"
-    vwn_conf_set XHTTP_UUID    "$xhttp_uuid"
-    vwn_conf_set XHTTP_PATH    "$xhttp_path"
-    vwn_conf_set XHTTP_LPORT   "$xhttp_lport"
 
     # Итог
     echo ""

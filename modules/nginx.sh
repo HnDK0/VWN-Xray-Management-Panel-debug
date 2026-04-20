@@ -2,7 +2,8 @@
 # =================================================================
 # nginx.sh — Nginx конфиг, CDN, SSL сертификаты
 #
-# Режим BASE: WS+TLS на 443 (Nginx напрямую с SSL)
+# Режим: base — WS+TLS на 443 (Nginx напрямую с SSL)
+# XHTTP inbound слушает локально, nginx проксирует по пути
 # =================================================================
 
 VWN_CONFIG_DIR="${VWN_CONFIG_DIR:-/usr/local/lib/vwn/config}"
@@ -49,67 +50,40 @@ writeNginxConfigBase() {
         DOMAIN "$domain" XRAY_PORT "$xrayPort" WS_PATH "$wsPath" \
         PROXY_URL "$proxyUrl" PROXY_HOST "$proxy_host"
 
-    vwn_conf_set STUB_URL "$proxyUrl"
-    vwn_conf_set NGINX_MODE "base"
-    vwn_conf_set DOMAIN    "$domain"
-
-    # Если XHTTP установлен — инжектируем location блок
+    # Если XHTTP установлен — восстанавливаем его location
     local xhttp_path xhttp_lport
     xhttp_path=$(vwn_conf_get XHTTP_PATH || true)
     xhttp_lport=$(vwn_conf_get XHTTP_LPORT || true)
-    if [ -n "$xhttp_path" ] && [ -n "$xhttp_lport" ]; then
-        _injectXhttpLocation "$xhttp_path" "$xhttp_lport"
+    if [ -n "$xhttp_path" ] && [ -n "$xhttp_lport" ] && [ -f "$xhttpConfigPath" ]; then
+        _injectXhttpLocation "$xhttp_path" "$xhttp_lport" || true
     fi
+
+    vwn_conf_set STUB_URL "$proxyUrl"
+    vwn_conf_set NGINX_MODE "base"
+    vwn_conf_set DOMAIN    "$domain"
 
     setupRealIpRestore
     _writeSubMapConf
 }
 
-# ── Утилиты инжекции XHTTP location ──────────────────────────────
+# ── XHTTP: инжекция и удаление location в nginx конфиге ─────────────────────
 
+# Добавляет location для XHTTP в текущий nginxPath
+# Использование: _injectXhttpLocation "/path" "local_port"
 _injectXhttpLocation() {
-    local path="$1" lport="$2"
-    [ -f "$nginxPath" ] || return 1
-    _removeXhttpLocation
-    # Используем Python для надёжной многострочной вставки перед «    location / {»
-    python3 - "$nginxPath" "$path" "$lport" << 'PYEOF'
-import sys
-fpath, xpath, lport = sys.argv[1], sys.argv[2], sys.argv[3]
-block = (
-    f"    location {xpath} {{\n"
-    f"        proxy_pass http://127.0.0.1:{lport};\n"
-    f"        proxy_http_version 2.0;\n"
-    f"        proxy_request_buffering off;\n"
-    f"        access_log off;\n"
-    f"        error_log /dev/null crit;\n"
-    f"    }}\n\n"
-)
-content = open(fpath).read()
-marker = "    location / {"
-if marker in content:
-    content = content.replace(marker, block + marker, 1)
-    open(fpath, "w").write(content)
-else:
-    sys.exit(1)
-PYEOF
+    local xhttp_path="$1" xhttp_lport="$2"
+
+    # Не добавляем дважды
+    if grep -q "xray-xhttp-location" "$nginxPath" 2>/dev/null; then
+        return 0
+    fi
+
+    sed -i "/    location \/ {/i\\    # xray-xhttp-location\n    location ${xhttp_path} {\n        proxy_pass http:\/\/127.0.0.1:${xhttp_lport};\n        proxy_http_version 2.0;\n        proxy_set_header Host \$host;\n        proxy_set_header X-Real-IP \$remote_addr;\n        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\n        proxy_buffering off;\n        proxy_cache off;\n        proxy_request_buffering off;\n        access_log off;\n        error_log \/dev\/null crit;\n    }\n" "$nginxPath" || return 1
 }
 
+# Удаляет location для XHTTP из текущего nginxPath
 _removeXhttpLocation() {
-    [ -f "$nginxPath" ] || return 0
-    # Удаляем xhttp location блок (маркер: proxy_http_version 2.0)
-    python3 - "$nginxPath" << 'PYEOF'
-import sys, re
-fpath = sys.argv[1]
-content = open(fpath).read()
-# Удаляем блок вида: «    location /path { ... proxy_http_version 2.0; ... }\n\n»
-pattern = re.compile(
-    r'    location /[^\s{][^\n]*\{[^}]*proxy_http_version 2\.0;[^}]*\}\n\n',
-    re.DOTALL
-)
-new = pattern.sub('', content)
-if new != content:
-    open(fpath, 'w').write(new)
-PYEOF
+    sed -i '/# xray-xhttp-location/{N;:loop;N;/\n    }$/!b loop;d}' "$nginxPath" || true
 }
 
 # ── Утилиты ──────────────────────────────────────────────────────────────────
@@ -361,6 +335,7 @@ configCert() {
         --fullchain-file /etc/nginx/cert/cert.pem \
         --reloadcmd "systemctl reload nginx"
 
+    # Даём пользователю xray доступ к cert.key
     chmod 640 /etc/nginx/cert/cert.key
     chown root:xray /etc/nginx/cert/cert.key || true
 

@@ -118,7 +118,7 @@ toggleWarpMode() {
             echo "${green}$(msg warp_global_ok)${reset}"
             systemctl restart xray || true
             systemctl restart xray-reality || true
-    systemctl restart xray-xhttp || true
+            systemctl restart xray-xhttp || true
             rebuildAllSubFiles || true
             ;;
         2)
@@ -134,7 +134,7 @@ toggleWarpMode() {
             echo "${green}$(msg warp_off_ok)${reset}"
             systemctl restart xray || true
             systemctl restart xray-reality || true
-    systemctl restart xray-xhttp || true
+            systemctl restart xray-xhttp || true
             ;;
         0) return 0 ;;
         *) echo "${red}$(msg cancel)${reset}" ;;

@@ -405,7 +405,7 @@ _diagConnectivity() {
 }
 
 _diagXhttp() {
-    echo -e "${cyan}[ XHTTP (CDN транспорт) ]${reset}"
+    echo -e "${cyan}[ XHTTP ]${reset}"
 
     if [ ! -f "$xhttpConfigPath" ]; then
         _skip "XHTTP $(msg diag_not_installed)"
@@ -413,52 +413,27 @@ _diagXhttp() {
         return
     fi
 
-    # Валидность конфига
-    if xray -test -config "$xhttpConfigPath" 2>/dev/null; then
+    if xray -test -config "$xhttpConfigPath" > /dev/null 2>&1; then
         _pass "$(msg diag_xhttp_config_ok)"
     else
         _fail "$(msg diag_xhttp_config_bad)"
         xray -test -config "$xhttpConfigPath" 2>&1 | head -5 | sed 's/^/      /'
     fi
 
-    # Сервис запущен
     if systemctl is-active --quiet xray-xhttp; then
         _pass "$(msg diag_xhttp_running)"
     else
         _fail "$(msg diag_xhttp_stopped)"
     fi
 
-    # Локальный порт слушается
-    local lport
-    lport=$(vwn_conf_get XHTTP_LPORT || true)
-    if [ -n "$lport" ]; then
-        if ss -tlnp | grep -q ":${lport} "; then
-            _pass "$(msg diag_port_listen): 127.0.0.1:${lport} (xray-xhttp)"
-        else
-            _fail "$(msg diag_port_not_listen): 127.0.0.1:${lport}"
-        fi
-    fi
-
-    # Nginx location блок присутствует
-    local xhttp_path
-    xhttp_path=$(vwn_conf_get XHTTP_PATH || true)
-    if [ -n "$xhttp_path" ] && [ -f "$nginxPath" ]; then
-        if grep -q "location ${xhttp_path}" "$nginxPath"; then
-            _pass "Nginx location ${xhttp_path} → ok"
-        else
-            _fail "Nginx location ${xhttp_path} — не найден в ${nginxPath}"
-        fi
-    fi
-
-    # UUID задан
-    local xhttp_uuid
-    xhttp_uuid=$(vwn_conf_get XHTTP_UUID || true)
-    if [ -n "$xhttp_uuid" ] && [ "$xhttp_uuid" != "null" ]; then
-        _pass "XHTTP_UUID: ${xhttp_uuid}"
+    local xhttp_path xhttp_lport
+    xhttp_path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
+    xhttp_lport=$(vwn_conf_get XHTTP_LPORT || echo "?")
+    if grep -q "xray-xhttp-location" "$nginxPath" 2>/dev/null; then
+        _pass "nginx: location ${xhttp_path} → 127.0.0.1:${xhttp_lport}"
     else
-        _warn "XHTTP_UUID не задан в vwn.conf"
+        _fail "nginx location для XHTTP не найден"
     fi
-
     echo ""
 }
 
@@ -505,7 +480,7 @@ manageDiag() {
         echo -e "${green}1.${reset} $(msg diag_run_full)"
         echo -e "${green}2.${reset} $(msg diag_run_system)"
         echo -e "${green}3.${reset} $(msg diag_run_xray)"
-        echo -e "${green}4.${reset} XHTTP диагностика"
+        echo -e "${green}4.${reset} $(msg diag_run_xhttp)"
         echo -e "${green}5.${reset} $(msg diag_run_nginx)"
         echo -e "${green}6.${reset} $(msg diag_run_warp)"
         echo -e "${green}7.${reset} Fail2Ban & Web-Jail"

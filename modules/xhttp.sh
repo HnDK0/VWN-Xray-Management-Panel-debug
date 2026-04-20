@@ -3,13 +3,14 @@
 # xhttp.sh — VLESS + XHTTP Transport (CDN совместимый)
 #
 # Архитектура:
-#   ✅ Xray XHTTP инбаунд слушает локально на 127.0.0.1:XHTTP_LPORT
-#   ✅ Nginx пробрасывает трафик с XHTTP_PATH на этот инбаунд
+#   ✅ Независим от других модулей
+#   ✅ Xray XHTTP inbound слушает локально на 127.0.0.1:LPORT
+#   ✅ Nginx проксирует трафик с пути /xhttp-path на этот inbound
+#   ✅ Снаружи — всегда порт 443 через nginx
 #   ✅ Полностью совместим со всеми CDN включая Cloudflare
 # =================================================================
 
 XHTTP_SERVICE="/etc/systemd/system/xray-xhttp.service"
-xhttpConfigPath="/usr/local/etc/xray/xhttp.json"
 
 _ensureXhttpLogAccess() {
     mkdir -p /var/log/xray
@@ -27,11 +28,10 @@ getXhttpStatus() {
         return
     fi
     if systemctl is-active --quiet xray-xhttp; then
-        local domain
+        local domain path
         domain=$(vwn_conf_get DOMAIN || true)
-        local xhttp_path
-        xhttp_path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
-        echo "${green}RUNNING${reset} | ${domain:-?}:443${xhttp_path} (CDN mode)"
+        path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
+        echo "${green}RUNNING${reset} | ${domain:-?}:443${path} (CDN mode)"
     else
         echo "${red}STOPPED${reset}"
     fi
@@ -40,19 +40,16 @@ getXhttpStatus() {
 # ── Генерация конфига Xray ─────────────────────────────────────────
 
 writeXhttpConfig() {
-    local uuid="$1"
-    local path="$2"
-    local domain="$3"
-    local lport="$4"
+    local uuid="$1" path="$2" domain="$3" lport="$4"
 
     mkdir -p "$(dirname "$xhttpConfigPath")"
     _ensureXhttpLogAccess
 
     render_config "$VWN_CONFIG_DIR/xray_xhttp.json" "$xhttpConfigPath" \
-        UUID "$uuid" \
-        PATH "$path" \
+        UUID   "$uuid"   \
+        PATH   "$path"   \
         DOMAIN "$domain" \
-        XHTTP_LPORT "$lport"
+        PORT   "$lport"
 
     chown xray:xray "$xhttpConfigPath" || true
     chmod 640 "$xhttpConfigPath" || true
@@ -100,7 +97,7 @@ _xhttpApplyActiveFeatures() {
     echo -e "${cyan}Applying active features to XHTTP config${reset}"
 
     # WARP
-    if command -v warp-cli; then
+    if command -v warp-cli > /dev/null 2>&1; then
         local warp_raw warp_rule
         warp_raw=$(getWarpStatusRaw || echo "OFF")
         if [ "$warp_raw" = "ACTIVE" ] && [ -f "$configPath" ]; then
@@ -138,37 +135,56 @@ installXhttp() {
     echo -e "${cyan}================================================================${reset}"
     echo ""
 
-    # Домен из vwn.conf, UUID генерируем свой
-    local xhttp_domain xhttp_uuid xhttp_path lport
+    # Проверяем что базовая WS установка есть (nginx держит 443)
+    if [ ! -f "$configPath" ]; then
+        echo "${red}Сначала выполните базовую установку WS.${reset}"
+        return 1
+    fi
+
+    local xhttp_domain xhttp_uuid xhttp_path xhttp_lport
+
     xhttp_domain=$(vwn_conf_get DOMAIN || true)
     if [ -z "$xhttp_domain" ]; then
-        echo "${red}Сначала установите основной WS+TLS стек (nginx + xray).${reset}"
+        echo "${red}Домен не найден. Выполните базовую установку.${reset}"
         return 1
     fi
-    xhttp_uuid=$(uuidgen)
-    
-    # Генерируем уникальный путь как у WebSocket
+
+    # Генерируем собственный UUID независимо от других модулей
+    xhttp_uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null \
+        || uuidgen 2>/dev/null \
+        || python3 -c "import uuid; print(uuid.uuid4())")
+
+    # Генерируем уникальный путь
     xhttp_path="/api/v2/$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)"
 
-    echo -e "${cyan}Используется домен:${reset} ${green}${xhttp_domain}${reset}"
-    echo -e "${cyan}Путь:${reset} ${green}${xhttp_path}${reset}"
-    echo ""
-
-    # Выбираем свободный локальный порт
-    lport=$(findFreePort 45000 45999)
-    if [ -z "$lport" ]; then
-        echo "${red}Нет свободных портов в диапазоне 45000-45999${reset}"
+    # Выбираем свободный локальный порт для inbound
+    xhttp_lport=$(findFreePort 45000 45999)
+    if [ -z "$xhttp_lport" ]; then
+        echo "${red}Не удалось найти свободный локальный порт (45000-45999).${reset}"
         return 1
     fi
-    vwn_conf_set XHTTP_LPORT "$lport"
+
+    echo -e "${cyan}Домен:${reset}       ${green}${xhttp_domain}${reset}"
+    echo -e "${cyan}Путь:${reset}        ${green}${xhttp_path}${reset}"
+    echo -e "${cyan}Лок. порт:${reset}   ${green}${xhttp_lport}${reset}"
+    echo ""
 
     # Конфиг Xray
-    echo -e "${cyan}Установка XHTTP конфигурации...${reset}"
-    writeXhttpConfig "$xhttp_uuid" "$xhttp_path" "$xhttp_domain" "$lport"
+    echo -e "${cyan}Запись XHTTP конфигурации...${reset}"
+    writeXhttpConfig "$xhttp_uuid" "$xhttp_path" "$xhttp_domain" "$xhttp_lport"
 
-    # Инжектируем location в nginx конфиг
-    _injectXhttpLocation "$xhttp_path" "$lport"
-    nginx -t && systemctl reload nginx || { echo "${red}Ошибка конфига nginx${reset}"; return 1; }
+    # Инжектируем location в nginx
+    echo -e "${cyan}Обновление nginx конфига...${reset}"
+    _injectXhttpLocation "$xhttp_path" "$xhttp_lport" || {
+        echo "${red}Ошибка обновления nginx конфига.${reset}"
+        return 1
+    }
+    nginx -t && systemctl reload nginx || {
+        echo "${red}nginx не принял конфиг. Откат...${reset}"
+        _removeXhttpLocation || true
+        nginx -t && systemctl reload nginx || true
+        return 1
+    }
 
     # Сервис
     setupXhttpService || return 1
@@ -178,8 +194,9 @@ installXhttp() {
 
     # Сохраняем мета-данные
     vwn_conf_set XHTTP_ENABLED "true"
-    vwn_conf_set XHTTP_PATH "$xhttp_path"
-    vwn_conf_set XHTTP_UUID "$xhttp_uuid"
+    vwn_conf_set XHTTP_UUID    "$xhttp_uuid"
+    vwn_conf_set XHTTP_PATH    "$xhttp_path"
+    vwn_conf_set XHTTP_LPORT   "$xhttp_lport"
 
     # Итог
     echo ""
@@ -200,23 +217,24 @@ showXhttpInfo() {
         return
     fi
 
-    local domain uuid server_ip path
-    domain=$(vwn_conf_get DOMAIN || true)
-    uuid=$(vwn_conf_get XHTTP_UUID || true)
-    server_ip=$(getServerIP)
-    path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
+    local domain uuid path lport
+    domain=$(vwn_conf_get DOMAIN     || true)
+    uuid=$(vwn_conf_get XHTTP_UUID   || true)
+    path=$(vwn_conf_get XHTTP_PATH   || echo "/xhttp")
+    lport=$(vwn_conf_get XHTTP_LPORT || echo "?")
 
     echo ""
     echo -e "${cyan}━━━ XHTTP (CDN транспорт) ━━━${reset}"
     echo ""
-    echo -e "  ${cyan}Домен:${reset}  ${green}${domain:-?}${reset}"
-    echo -e "  ${cyan}UUID:${reset}    ${green}${uuid:-?}${reset}"
-    echo -e "  ${cyan}Порт:${reset}    ${green}443${reset}"
-    echo -e "  ${cyan}Путь:${reset}    ${green}${path}${reset}"
-    echo -e "  ${cyan}Транспорт:${reset} VLESS + XHTTP"
-    echo -e "  ${cyan}Статус:${reset}  $(getXhttpStatus)"
+    echo -e "  ${cyan}Домен:${reset}      ${green}${domain:-?}${reset}"
+    echo -e "  ${cyan}UUID:${reset}       ${green}${uuid:-?}${reset}"
+    echo -e "  ${cyan}Порт:${reset}       ${green}443${reset} (nginx → 127.0.0.1:${lport})"
+    echo -e "  ${cyan}Путь:${reset}       ${green}${path}${reset}"
+    echo -e "  ${cyan}Транспорт:${reset}  VLESS + XHTTP"
+    echo -e "  ${cyan}Статус:${reset}     $(getXhttpStatus)"
     echo ""
     echo -e " ✅ Полностью совместимо со всеми CDN"
+    echo -e " ✅ Работает независимо от других модулей"
     echo ""
 }
 
@@ -227,15 +245,15 @@ showXhttpQR() {
     fi
 
     local domain uuid path
-    domain=$(vwn_conf_get DOMAIN || true)
+    domain=$(vwn_conf_get DOMAIN   || true)
     uuid=$(vwn_conf_get XHTTP_UUID || true)
     path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
 
     [ -z "$domain" ] || [ -z "$uuid" ] && {
-        echo "${red}XHTTP не установлен${reset}"; return
+        echo "${red}Данные XHTTP не найдены. Переустановите XHTTP.${reset}"; return
     }
 
-    local flag server_ip v_label v_name v_encoded_name modes
+    local flag server_ip v_label v_name v_encoded_name modes path_encoded
     server_ip=$(getServerIP || echo "")
     flag=$(_getCountryFlag "$server_ip" || echo "🌐")
     modes=$(_getActiveModesSuffix || true)
@@ -243,13 +261,14 @@ showXhttpQR() {
     [ -f "$USERS_FILE" ] && v_label=$(cut -d'|' -f2 "$USERS_FILE" | head -1)
     v_name="${flag} VL-XHTTP | ${v_label} ${flag}${modes}"
     v_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$v_name" || echo "$v_name")
+    path_encoded=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe='/'))" "$path" || echo "$path")
 
     local link
-    link="vless://${uuid}@${domain}:443?security=tls&type=xhttp&path=${path}&sni=${domain}&fp=chrome&allowInsecure=0#${v_encoded_name}"
+    link="vless://${uuid}@${domain}:443?security=tls&type=xhttp&path=${path_encoded}&sni=${domain}&fp=chrome&allowInsecure=0#${v_encoded_name}"
 
     echo -e "${cyan}XHTTP ссылка:${reset}"
     echo ""
-    if command -v qrencode; then
+    if command -v qrencode > /dev/null 2>&1; then
         qrencode -t ANSIUTF8 "$link"
     fi
     echo ""
@@ -273,14 +292,14 @@ removeXhttp() {
 
     rm -f "$xhttpConfigPath"
 
-    vwn_conf_del XHTTP_ENABLED
-    vwn_conf_del XHTTP_PATH
-    vwn_conf_del XHTTP_UUID
-    vwn_conf_del XHTTP_LPORT
-
-    # Удаляем location из Nginx конфига
-    _removeXhttpLocation
+    # Убираем location из nginx
+    _removeXhttpLocation || true
     nginx -t && systemctl reload nginx || true
+
+    vwn_conf_del XHTTP_ENABLED
+    vwn_conf_del XHTTP_UUID
+    vwn_conf_del XHTTP_PATH
+    vwn_conf_del XHTTP_LPORT
 
     # Перегенерируем подписки
     rebuildAllSubFiles || true
@@ -291,20 +310,17 @@ removeXhttp() {
 # ── Пересоздание конфигов ─────────────────────────────────────────
 
 rebuildXhttpConfigs() {
+    local silent="${1:-}"
     if [ ! -f "$xhttpConfigPath" ]; then
-        echo "${red}XHTTP не установлен${reset}"; return 1
+        [ -z "$silent" ] && echo "${red}XHTTP не установлен${reset}"
+        return 1
     fi
 
     local xhttp_uuid xhttp_path xhttp_domain xhttp_lport
-    xhttp_uuid=$(vwn_conf_get XHTTP_UUID || true)
-    xhttp_path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
-    xhttp_domain=$(vwn_conf_get DOMAIN || true)
+    xhttp_uuid=$(vwn_conf_get XHTTP_UUID  || true)
+    xhttp_path=$(vwn_conf_get XHTTP_PATH  || echo "/xhttp")
+    xhttp_domain=$(vwn_conf_get DOMAIN    || true)
     xhttp_lport=$(vwn_conf_get XHTTP_LPORT || true)
-
-    if [ -z "$xhttp_lport" ]; then
-        echo "${red}XHTTP_LPORT не задан в vwn.conf — переустановите XHTTP${reset}"
-        return 1
-    fi
 
     echo -e "${cyan}Rebuilding XHTTP configs...${reset}"
 
@@ -323,12 +339,12 @@ manageXhttp() {
     while true; do
         clear
         echo -e "${cyan}================================================================${reset}"
-        printf "   ${red}XHTTP (CDN транспорт)${reset}  %s\n" "$(date +'%d.%m.%Y %H:%M')"
+        printf "   ${cyan}XHTTP (CDN транспорт)${reset}  %s\n" "$(date +'%d.%m.%Y %H:%M')"
         echo -e "${cyan}----------------------------------------------------------------${reset}"
         echo -e "  Статус: $(getXhttpStatus)"
         if [ -f "$xhttpConfigPath" ]; then
             local _dom _path
-            _dom=$(vwn_conf_get DOMAIN || true)
+            _dom=$(vwn_conf_get DOMAIN    || true)
             _path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
             echo -e "  Домен: ${green}${_dom:-?}${reset}"
             echo -e "  Путь:  ${green}${_path}${reset}"

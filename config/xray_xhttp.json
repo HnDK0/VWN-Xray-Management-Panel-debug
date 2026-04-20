@@ -9,7 +9,7 @@
   },
     "inbounds": [{
         "listen": "127.0.0.1",
-        "port": __XHTTP_LPORT__,
+        "port": __PORT__,
         "protocol": "vless",
         "settings": {
             "clients": [{"id": "__UUID__"}],

@@ -68,6 +68,11 @@ rebuildAllConfigs() {
         echo ""
     }
 
+    [ -f "$xhttpConfigPath" ] && {
+        rebuildXhttpConfigs true
+        echo ""
+    }
+
     echo -e "${cyan}Rebuilding subscription files...${reset}"
     rebuildAllSubFiles || true
 
@@ -87,9 +92,9 @@ reset=$(tput sgr0)
 # Пути конфигов
 configPath='/usr/local/etc/xray/config.json'
 realityConfigPath='/usr/local/etc/xray/reality.json'
-xhttpConfigPath='/usr/local/etc/xray/xhttp.json'
 nginxPath='/etc/nginx/conf.d/xray.conf'
 cf_key_file="/root/.cloudflare_api"
+xhttpConfigPath='/usr/local/etc/xray/xhttp.json'
 warpDomainsFile='/usr/local/etc/xray/warp_domains.txt'
 relayDomainsFile='/usr/local/etc/xray/relay_domains.txt'
 relayConfigFile='/usr/local/etc/xray/relay.conf'

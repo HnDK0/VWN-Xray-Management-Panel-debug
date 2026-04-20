@@ -23,9 +23,14 @@ _installNginxMainline() {
     cur_ver=$(nginx -v 2>&1 | grep -oP '\d+\.\d+\.\d+' | head -1)
     cur_minor=$(echo "$cur_ver" | cut -d. -f2)
     cur_patch=$(echo "$cur_ver" | cut -d. -f3)
-    if [ -n "$cur_ver" ] && { [ "${cur_minor:-0}" -ge 26 ] || { [ "${cur_minor:-0}" -eq 25 ] && [ "${cur_patch:-0}" -ge 1 ]; }; }; then
-        echo "info: nginx $cur_ver already sufficient (>= 1.25.1), skipping."
-        return 0
+    # Требуем nginx >= 1.25.1 (http2 on с ALPN появился в 1.25.1)
+    if [ -n "$cur_ver" ]; then
+        if [ "${cur_minor:-0}" -gt 25 ] || \
+           { [ "${cur_minor:-0}" -eq 25 ] && [ "${cur_patch:-0}" -ge 1 ]; } || \
+           [ "${cur_minor:-0}" -ge 26 ]; then
+            echo "info: nginx $cur_ver already sufficient (>= 1.25.1), skipping."
+            return 0
+        fi
     fi
     echo -e "${cyan}nginx ${cur_ver:-not installed} — installing mainline from nginx.org...${reset}"
     if command -v apt; then
@@ -205,13 +210,11 @@ install() {
     echo ""
     echo -e "\t${green}$(msg install_type_1)${reset}"
     echo -e "\t${green}$(msg install_type_2)${reset}"
-    echo -e "\t${green}$(msg install_type_3)${reset}"
     echo ""
     read -rp "$(msg choose)" install_type_choice
     case "${install_type_choice:-1}" in
         1) installWsTls ;;
         2) installRealityOnly ;;
-        3) installVision ;;
         *) echo "${red}$(msg invalid)${reset}"; return 1 ;;
     esac
 }
@@ -290,17 +293,17 @@ manageWs() {
         echo -e "  ${green}3.${reset}  $(msg menu_domain)"
         echo -e "  ${green}4.${reset}  $(msg menu_cdn_host)"
         echo -e "  ${green}5.${reset}  $(msg menu_ssl)"
-        echo -e "  ${green}5.${reset}  $(msg menu_stub)"
-        echo -e "  ${green}5.${reset}  $(msg menu_cfguard)"
-        echo -e "  ${green}5.${reset}  $(msg menu_cf_update_ip)"
-        echo -e "  ${green}5.${reset}  $(msg menu_ssl_cron)"
-        echo -e "  ${green}5.${reset} $(msg menu_log_cron)"
-        echo -e "  ${green}5.${reset} $(msg menu_uuid)"
-        echo -e "  ${green}5.${reset} $(msg menu_sub_auth)"
-        echo -e "  ${green}5.${reset} $(msg menu_rebuild_ws)"
+        echo -e "  ${green}6.${reset}  $(msg menu_stub)"
+        echo -e "  ${green}7.${reset}  $(msg menu_cfguard)"
+        echo -e "  ${green}8.${reset}  $(msg menu_cf_update_ip)"
+        echo -e "  ${green}9.${reset}  $(msg menu_ssl_cron)"
+        echo -e "  ${green}10.${reset} $(msg menu_log_cron)"
+        echo -e "  ${green}11.${reset} $(msg menu_uuid)"
+        echo -e "  ${green}12.${reset} $(msg menu_sub_auth)"
+        echo -e "  ${green}13.${reset} $(msg menu_rebuild_ws)"
         echo -e "${cyan}----------------------------------------------------------------${reset}"
-        echo -e "  ${green}5.${reset} $(msg menu_install)"
-        echo -e "  ${green}30.${reset} $(msg menu_remove)"
+        echo -e "  ${green}14.${reset} $(msg menu_install)"
+        echo -e "  ${green}15.${reset} $(msg menu_remove)"
         echo -e "${cyan}----------------------------------------------------------------${reset}"
         echo -e "  ${green}0.${reset}  $(msg back)"
         echo -e "${cyan}================================================================${reset}"
@@ -311,16 +314,16 @@ manageWs() {
             3)  modifyDomain ;;
             4)  modifyConnectHost ;;
             5)  getConfigInfo && userDomain="$xray_userDomain" && configCert ;;
-            5)  modifyProxyPassUrl ;;
-            6)  toggleCfGuard ;;
-            7)  setupRealIpRestore && { [ -f /etc/nginx/conf.d/cf_guard.conf ] && _fetchCfGuardIPs; } && nginx -t && systemctl reload nginx ;;
-            8)  manageSslCron ;;
-            9) manageLogClearCron ;;
-            10) modifyXrayUUID ;;
-            11) manageSubAuth ;;
-            12) rebuildXrayConfigs ;;
-            13) install ;;
-            14) removeWs ;;
+            6)  modifyProxyPassUrl ;;
+            7)  toggleCfGuard ;;
+            8)  setupRealIpRestore && { [ -f /etc/nginx/conf.d/cf_guard.conf ] && _fetchCfGuardIPs; } && nginx -t && systemctl reload nginx ;;
+            9)  manageSslCron ;;
+            10) manageLogClearCron ;;
+            11) modifyXrayUUID ;;
+            12) manageSubAuth ;;
+            13) rebuildXrayConfigs ;;
+            14) install ;;
+            15) removeWs ;;
             0)  break ;;
         esac
         [ "$choice" = "0" ] && continue
@@ -382,7 +385,7 @@ menu() {
         echo -e "  ${cyan}── $(msg menu_sep_proto_short) ───────────────────────────────────────────────${reset}"
         echo -e "  $(printf "%-9s" "WS:")$s_ws_c,  Nginx: $s_nginx_c"
         echo -e "  $(printf "%-9s" "Reality:")$s_reality_c,  SSL: $s_ssl"
-        echo -e "  $(printf "%-9s" "XHTTP:")$s_xhttp"
+        echo -e "  $(printf "%-9s" "XHTTP:")$s_xhttp,  CF Guard: $s_cfguard"
         [ -n "$s_connect" ] && echo -e "  CDN: ${green}${s_connect}${reset}"
         echo -e "  ${cyan}── $(msg menu_sep_tun_short) ───────────────────────────────────────────────${reset}"
         echo -e "  WARP: $s_warp,  Relay: $s_relay,  Psiphon: $s_psiphon,  Tor: $s_tor"

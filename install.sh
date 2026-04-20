@@ -827,7 +827,6 @@ _validate_auto_params() {
         [[ -z "$OPT_CF_KEY"   ]] && die "--cf-key обязателен при --cert-method cf"
     }
 
-
     [[ "$OPT_CERT_METHOD" != "cf" && "$OPT_CERT_METHOD" != "standalone" ]] \
         && die "--cert-method: допустимо 'cf' или 'standalone'"
 
@@ -946,6 +945,7 @@ _auto_ssl() {
             --fullchain-file /etc/nginx/cert/cert.pem \
             --reloadcmd      "systemctl restart nginx || true"
 
+    # Даём пользователю xray доступ к cert.key
     chmod 640 /etc/nginx/cert/cert.key
     chown root:xray /etc/nginx/cert/cert.key || true
 
@@ -1028,7 +1028,6 @@ _auto_install_reality() {
     ok "Reality: порт=${OPT_REALITY_PORT}  SNI=${OPT_REALITY_DEST}"
 }
 
-
 _auto_change_ssh_port() {
     local new_port="$1"
     local old_port
@@ -1097,7 +1096,7 @@ _auto_toggle_ipv6_on() {
 # -----------------------------------------------------------------
 # ГЛАВНАЯ ФУНКЦИЯ АВТОМАТИЧЕСКОЙ УСТАНОВКИ
 # Порядок: validate → print → load_modules → systemные пакеты →
-# Порядок: WS → Reality → опциональные
+#          WS → Reality → Vision → опциональные
 # -----------------------------------------------------------------
 _run_auto() {
     echo -e "${CYAN}$(printf '═%.0s' {1..64})${RESET}"
@@ -1171,6 +1170,7 @@ _run_auto() {
     # ── Reality ───────────────────────────────────────────────────
     $OPT_REALITY && _auto_install_reality
 
+    # ── Vision ────────────────────────────────────────────────────
 
     # ── Опциональные компоненты (порядок важен!) ──────────────────
 

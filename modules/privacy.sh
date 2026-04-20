@@ -294,8 +294,8 @@ showPrivacyStatus() {
         xray_acc=$(jq -r '.log.access // "—"' "$xhttpConfigPath")
         xray_lvl=$(jq -r '.log.loglevel // "—"' "$xhttpConfigPath")
         [ "$xray_acc" = "none" ] && [ "$xray_lvl" = "none" ] \
-            && echo -e "  ${green}✓${reset}  Xray XHTTP: access=none, loglevel=none" \
-            || echo -e "  ${red}✗${reset}  Xray XHTTP: access=${xray_acc}, loglevel=${xray_lvl}"
+            && echo -e "  ${green}✓${reset}  Xray XHTTP:  access=none, loglevel=none" \
+            || echo -e "  ${red}✗${reset}  Xray XHTTP:  access=${xray_acc}, loglevel=${xray_lvl}"
     fi
 
     # journald override

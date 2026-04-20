@@ -67,7 +67,6 @@ _applyUsersToConfigs() {
         jq --argjson c "$clients_r" '.inbounds[0].settings.clients = $c' \
             "$realityConfigPath" > "${realityConfigPath}.tmp" && mv "${realityConfigPath}.tmp" "$realityConfigPath"
     fi
-    # XHTTP использует тот же формат без flow (как WS)
     if [ -f "$xhttpConfigPath" ]; then
         jq --argjson c "$clients_x" '.inbounds[0].settings.clients = $c' \
             "$xhttpConfigPath" > "${xhttpConfigPath}.tmp" && mv "${xhttpConfigPath}.tmp" "$xhttpConfigPath"
@@ -75,7 +74,7 @@ _applyUsersToConfigs() {
 
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl try-restart xray-xhttp || true
+    systemctl restart xray-xhttp || true
 }
 
 # ── Инициализация ─────────────────────────────────────────────────
@@ -146,7 +145,6 @@ buildUserSubFile() {
         r_name=$(_getConfigName "Reality" "$label" "$server_ip")
         r_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$r_name" || echo "$r_name")
         lines+="vless://${r_uuid}@${server_ip}:${r_port}?encryption=none&security=reality&sni=${r_destHost}&fp=chrome&pbk=${r_pubKey}&sid=${r_shortId}&type=tcp&flow=xtls-rprx-vision#${r_encoded_name}"$'\n'
-    fi
     fi
 
     if [ -f "$xhttpConfigPath" ]; then

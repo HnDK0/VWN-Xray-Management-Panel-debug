@@ -782,12 +782,11 @@ _initLang() {
     MSG[vision_apply_features]=$(    [ "$VWN_LANG" = en ] && echo "Applying active features to Vision config..." || echo "Применение активных фич к конфигу Vision...")
     MSG[diag_vision_config_ok]=$(    [ "$VWN_LANG" = en ] && echo "Vision config valid"                    || echo "Конфиг Vision корректен")
     MSG[diag_vision_config_bad]=$(   [ "$VWN_LANG" = en ] && echo "Vision config ERROR!"                   || echo "Конфиг Vision ОШИБКА!")
-    MSG[diag_vision_running]=$(      [ "$VWN_LANG" = en ] && echo "xray-xhttp running"                    || echo "xray-xhttp запущен")
-    MSG[diag_vision_stopped]=$(      [ "$VWN_LANG" = en ] && echo "xray-xhttp stopped!"                   || echo "xray-xhttp не запущен!")
     MSG[diag_vision_ssl_ok]=$(       [ "$VWN_LANG" = en ] && echo "Vision SSL certificate OK"              || echo "SSL сертификат Vision в порядке")
     MSG[diag_vision_ssl_missing]=$(  [ "$VWN_LANG" = en ] && echo "Vision SSL certificate missing!"        || echo "SSL сертификат Vision отсутствует!")
     MSG[diag_section_vision]=$(      [ "$VWN_LANG" = en ] && echo "Vision"                                 || echo "Vision")
     MSG[diag_run_vision]=$(          [ "$VWN_LANG" = en ] && echo "Check Vision"                           || echo "Проверить Vision")
+    MSG[diag_run_xhttp]=$(           [ "$VWN_LANG" = en ] && echo "Check XHTTP"                            || echo "Проверить XHTTP")
     _initAdblockLang
     _initPrivacyLang
 }

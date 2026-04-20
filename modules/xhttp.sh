@@ -31,7 +31,9 @@ getXhttpStatus() {
     if systemctl is-active --quiet xray-xhttp; then
         local domain
         domain=$(vwn_conf_get DOMAIN || true)
-        echo "${green}RUNNING${reset} | ${domain:-?}:443/xhttp (CDN mode)"
+        local xhttp_path
+        xhttp_path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
+        echo "${green}RUNNING${reset} | ${domain:-?}:443${xhttp_path} (CDN mode)"
     else
         echo "${red}STOPPED${reset}"
     fi
@@ -136,16 +138,14 @@ installXhttp() {
     echo -e "${cyan}================================================================${reset}"
     echo ""
 
-    # Проверяем что есть работающий Vision
-    if [ ! -f "$visionConfigPath" ]; then
-        echo "${red}Сначала установите Vision. XHTTP работает поверх существующей Vision установки.${reset}"
+    # Домен из vwn.conf, UUID генерируем свой
+    local xhttp_domain xhttp_uuid xhttp_path lport
+    xhttp_domain=$(vwn_conf_get DOMAIN || true)
+    if [ -z "$xhttp_domain" ]; then
+        echo "${red}Сначала установите основной WS+TLS стек (nginx + xray).${reset}"
         return 1
     fi
-
-    # Домен и UUID из существующего Vision
-    local xhttp_domain xhttp_uuid xhttp_path
-    xhttp_domain=$(vwn_conf_get DOMAIN || true)
-    xhttp_uuid=$(vwn_conf_get VISION_UUID || true)
+    xhttp_uuid=$(uuidgen)
     
     # Генерируем уникальный путь как у WebSocket
     xhttp_path="/api/v2/$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)"
@@ -154,14 +154,21 @@ installXhttp() {
     echo -e "${cyan}Путь:${reset} ${green}${xhttp_path}${reset}"
     echo ""
 
+    # Выбираем свободный локальный порт
+    lport=$(findFreePort 45000 45999)
+    if [ -z "$lport" ]; then
+        echo "${red}Нет свободных портов в диапазоне 45000-45999${reset}"
+        return 1
+    fi
+    vwn_conf_set XHTTP_LPORT "$lport"
+
     # Конфиг Xray
     echo -e "${cyan}Установка XHTTP конфигурации...${reset}"
     writeXhttpConfig "$xhttp_uuid" "$xhttp_path" "$xhttp_domain"
 
-    # Обновляем Nginx конфиг — добавляем location для XHTTP
-    local proxy_url
-    proxy_url=$(vwn_conf_get STUB_URL || echo "https://www.bing.com/")
-    writeNginxConfigVision "$proxy_url" "$xhttp_domain"
+    # Инжектируем location в nginx конфиг
+    _injectXhttpLocation "$xhttp_path" "$lport"
+    nginx -t && systemctl reload nginx || { echo "${red}Ошибка конфига nginx${reset}"; return 1; }
 
     # Сервис
     setupXhttpService || return 1
@@ -176,7 +183,7 @@ installXhttp() {
     # Итог
     echo ""
     echo -e "${green}================================================================${reset}"
-    echo -e "   Vision XHTTP успешно установлен"
+    echo -e "   XHTTP успешно установлен"
     echo -e "${green}================================================================${reset}"
     showXhttpInfo
 
@@ -194,7 +201,7 @@ showXhttpInfo() {
 
     local domain uuid server_ip path
     domain=$(vwn_conf_get DOMAIN || true)
-    uuid=$(vwn_conf_get VISION_UUID || true)
+    uuid=$(vwn_conf_get XHTTP_UUID || true)
     server_ip=$(getServerIP)
     path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
 
@@ -222,7 +229,7 @@ showXhttpQR() {
 
     local domain uuid path
     domain=$(vwn_conf_get DOMAIN || true)
-    uuid=$(vwn_conf_get VISION_UUID || true)
+    uuid=$(vwn_conf_get XHTTP_UUID || true)
     path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
 
     [ -z "$domain" ] || [ -z "$uuid" ] && {
@@ -241,7 +248,7 @@ showXhttpQR() {
     local link
     link="vless://${uuid}@${domain}:443?security=tls&type=xhttp&path=${path}&sni=${domain}&fp=chrome&allowInsecure=0#${v_encoded_name}"
 
-    echo -e "${cyan}Vision XHTTP ссылка:${reset}"
+    echo -e "${cyan}XHTTP ссылка:${reset}"
     echo ""
     if command -v qrencode; then
         qrencode -t ANSIUTF8 "$link"
@@ -269,13 +276,11 @@ removeXhttp() {
 
     vwn_conf_del XHTTP_ENABLED
     vwn_conf_del XHTTP_PATH
+    vwn_conf_del XHTTP_UUID
+    vwn_conf_del XHTTP_LPORT
 
-    # Пересобираем Nginx конфиг без XHTTP
-    local proxy_url domain
-    proxy_url=$(vwn_conf_get STUB_URL || echo "https://www.bing.com/")
-    domain=$(vwn_conf_get DOMAIN || true)
-    writeNginxConfigVision "$proxy_url" "$domain"
-
+    # Удаляем location из Nginx конфига
+    _removeXhttpLocation
     nginx -t && systemctl reload nginx || true
 
     # Перегенерируем подписки
@@ -292,7 +297,7 @@ rebuildXhttpConfigs() {
     fi
 
     local xhttp_uuid xhttp_path xhttp_domain
-    xhttp_uuid=$(vwn_conf_get VISION_UUID || true)
+    xhttp_uuid=$(vwn_conf_get XHTTP_UUID || true)
     xhttp_path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
     xhttp_domain=$(vwn_conf_get DOMAIN || true)
 
@@ -313,7 +318,7 @@ manageXhttp() {
     while true; do
         clear
         echo -e "${cyan}================================================================${reset}"
-        printf "   ${red}Vision XHTTP (CDN)${reset}  %s\n" "$(date +'%d.%m.%Y %H:%M')"
+        printf "   ${red}XHTTP (CDN транспорт)${reset}  %s\n" "$(date +'%d.%m.%Y %H:%M')"
         echo -e "${cyan}----------------------------------------------------------------${reset}"
         echo -e "  Статус: $(getXhttpStatus)"
         if [ -f "$xhttpConfigPath" ]; then

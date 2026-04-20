@@ -153,7 +153,7 @@ applyPsiphonOutbound() {
     # Добавляет psiphon outbound (SOCKS5 на 40002) в оба конфига Xray
     local psiphon_ob='{"tag":"psiphon","protocol":"socks","settings":{"servers":[{"address":"127.0.0.1","port":40002}]}}'
 
-    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
         [ -f "$cfg" ] || continue
         local has_ob
         has_ob=$(jq '.outbounds[] | select(.tag=="psiphon")' "$cfg")
@@ -186,40 +186,40 @@ applyPsiphonDomains() {
 
     applyPsiphonOutbound
 
-    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
         [ -f "$cfg" ] || continue
         jq "(.routing.rules[] | select(.outboundTag == \"psiphon\")) |= (.domain = [$domains_json] | del(.port))" \
             "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
     done
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
     echo "${green}$(msg psiphon_split_ok)${reset}"
 }
 
 togglePsiphonGlobal() {
     applyPsiphonOutbound
-    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
         [ -f "$cfg" ] || continue
         jq '(.routing.rules[] | select(.outboundTag == "psiphon")) |= (.port = "0-65535" | del(.domain))' \
             "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
     done
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
     rebuildAllSubFiles || true
     echo "${green}$(msg psiphon_global_ok)${reset}"
 }
 
 removePsiphonFromConfigs() {
-    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
         [ -f "$cfg" ] || continue
         jq 'del(.outbounds[] | select(.tag=="psiphon")) | del(.routing.rules[] | select(.outboundTag=="psiphon"))' \
             "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
     done
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
 }
 
 checkPsiphonIP() {

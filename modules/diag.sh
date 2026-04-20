@@ -404,76 +404,61 @@ _diagConnectivity() {
     echo ""
 }
 
-_diagVision() {
-    echo -e "${cyan}[ $(msg diag_section_vision) ]${reset}"
+_diagXhttp() {
+    echo -e "${cyan}[ XHTTP (CDN транспорт) ]${reset}"
 
-    if [ ! -f "$visionConfigPath" ]; then
-        _skip "Vision $(msg diag_not_installed)"
+    if [ ! -f "$xhttpConfigPath" ]; then
+        _skip "XHTTP $(msg diag_not_installed)"
         echo ""
         return
     fi
 
     # Валидность конфига
-    if xray -test -config "$visionConfigPath"; then
-        _pass "$(msg diag_vision_config_ok)"
+    if xray -test -config "$xhttpConfigPath" 2>/dev/null; then
+        _pass "$(msg diag_xhttp_config_ok)"
     else
-        _fail "$(msg diag_vision_config_bad)"
-        xray -test -config "$visionConfigPath" 2>&1 | head -5 | sed 's/^/      /'
+        _fail "$(msg diag_xhttp_config_bad)"
+        xray -test -config "$xhttpConfigPath" 2>&1 | head -5 | sed 's/^/      /'
     fi
 
     # Сервис запущен
-    if systemctl is-active --quiet xray-vision; then
-        _pass "$(msg diag_vision_running)"
+    if systemctl is-active --quiet xray-xhttp; then
+        _pass "$(msg diag_xhttp_running)"
     else
-        _fail "$(msg diag_vision_stopped)"
+        _fail "$(msg diag_xhttp_stopped)"
     fi
 
-    # Порт 443 слушается (Vision напрямую)
-    if ss -tlnp | grep -q ":443 "; then
-        local vision_proc
-        vision_proc=$(ss -tlnp 'sport = :443' | awk 'NR>1{print $NF}' | head -1)
-        if echo "$vision_proc" | grep -q "xray"; then
-            _pass "$(msg diag_port_listen): 443 (xray-vision)"
+    # Локальный порт слушается
+    local lport
+    lport=$(vwn_conf_get XHTTP_LPORT || true)
+    if [ -n "$lport" ]; then
+        if ss -tlnp | grep -q ":${lport} "; then
+            _pass "$(msg diag_port_listen): 127.0.0.1:${lport} (xray-xhttp)"
         else
-            _warn "$(msg diag_port_listen): 443 ($vision_proc)"
+            _fail "$(msg diag_port_not_listen): 127.0.0.1:${lport}"
         fi
-    else
-        _fail "$(msg diag_port_not_listen): 443"
     fi
 
-    # SSL сертификат (общий с WS)
-    if [ -f /etc/nginx/cert/cert.pem ]; then
-        local expire_date expire_epoch now_epoch days_left
-        expire_date=$(openssl x509 -enddate -noout -in /etc/nginx/cert/cert.pem | cut -d= -f2)
-        expire_epoch=$(date -d "$expire_date" +%s)
-        now_epoch=$(date +%s)
-        days_left=$(( (expire_epoch - now_epoch) / 86400 ))
-        if [ "$days_left" -le 0 ]; then
-            _fail "$(msg diag_ssl_expired)"
-        elif [ "$days_left" -lt 15 ]; then
-            _warn "$(msg diag_ssl_expiring): $days_left $(msg diag_days)"
+    # Nginx location блок присутствует
+    local xhttp_path
+    xhttp_path=$(vwn_conf_get XHTTP_PATH || true)
+    if [ -n "$xhttp_path" ] && [ -f "$nginxPath" ]; then
+        if grep -q "location ${xhttp_path}" "$nginxPath"; then
+            _pass "Nginx location ${xhttp_path} → ok"
         else
-            _pass "$(msg diag_vision_ssl_ok): $days_left $(msg diag_days)"
+            _fail "Nginx location ${xhttp_path} — не найден в ${nginxPath}"
         fi
-    else
-        _fail "$(msg diag_vision_ssl_missing)"
     fi
 
-    # DNS резолвинг домена Vision
-    local vision_domain
-    vision_domain=$(vwn_conf_get VISION_DOMAIN || true)
-    if [ -n "$vision_domain" ]; then
-        local resolved_ip server_ip
-        resolved_ip=$(getent hosts "$vision_domain" | awk '{print $1}' | head -1)
-        server_ip=$(getServerIP)
-        if [ -z "$resolved_ip" ]; then
-            _fail "$(msg diag_dns_fail): $vision_domain"
-        elif [ "$resolved_ip" = "$server_ip" ]; then
-            _pass "$(msg diag_dns_ok): $vision_domain → $resolved_ip"
-        else
-            _warn "$(msg diag_dns_mismatch): $vision_domain → $resolved_ip ($(msg diag_server_ip): $server_ip)"
-        fi
+    # UUID задан
+    local xhttp_uuid
+    xhttp_uuid=$(vwn_conf_get XHTTP_UUID || true)
+    if [ -n "$xhttp_uuid" ] && [ "$xhttp_uuid" != "null" ]; then
+        _pass "XHTTP_UUID: ${xhttp_uuid}"
+    else
+        _warn "XHTTP_UUID не задан в vwn.conf"
     fi
+
     echo ""
 }
 
@@ -489,7 +474,7 @@ runFullDiag() {
 
     _diagSystem
     _diagXray
-    _diagVision
+    _diagXhttp
     _diagNginx
     _diagWarp
     _diagFail2Ban
@@ -520,7 +505,7 @@ manageDiag() {
         echo -e "${green}1.${reset} $(msg diag_run_full)"
         echo -e "${green}2.${reset} $(msg diag_run_system)"
         echo -e "${green}3.${reset} $(msg diag_run_xray)"
-        echo -e "${green}4.${reset} $(msg diag_run_vision)"
+        echo -e "${green}4.${reset} XHTTP диагностика"
         echo -e "${green}5.${reset} $(msg diag_run_nginx)"
         echo -e "${green}6.${reset} $(msg diag_run_warp)"
         echo -e "${green}7.${reset} Fail2Ban & Web-Jail"
@@ -533,7 +518,7 @@ manageDiag() {
             1) runFullDiag ;;
             2) clear; _DIAG_ISSUES=(); _diagSystem ;;
             3) clear; _DIAG_ISSUES=(); _diagXray ;;
-            4) clear; _DIAG_ISSUES=(); _diagVision ;;
+            4) clear; _DIAG_ISSUES=(); _diagXhttp ;;
             5) clear; _DIAG_ISSUES=(); _diagNginx ;;
             6) clear; _DIAG_ISSUES=(); _diagWarp ;;
             7) clear; _DIAG_ISSUES=(); _diagFail2Ban ;;

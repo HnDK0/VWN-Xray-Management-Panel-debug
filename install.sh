@@ -53,8 +53,8 @@ export LOG_FILE VWN_LIB VWN_BIN VWN_CONF VWN_CONFIG_DIR
 # Массивы — правильный способ хранить списки в bash.
 # Причина не использовать строки: IFS=$'\n\t' (если бы был) ломает
 # итерацию; массивы работают корректно при любом IFS.
-VWN_MODULES=(lang core xray nginx warp reality relay psiphon tor security logs backup users diag privacy adblock vision xhttp menu)
-VWN_CONFIGS=(nginx_main.conf nginx_base.conf nginx_vision.conf nginx_default.conf sub_map.conf xray_ws.json xray_vision.json xray_reality.json xray_xhttp.json xray-vision.service)
+VWN_MODULES=(lang core xray nginx warp reality relay psiphon tor security logs backup users diag privacy adblock xhttp menu)
+VWN_CONFIGS=(nginx_main.conf nginx_base.conf nginx_default.conf sub_map.conf xray_ws.json xray_reality.json xray_xhttp.json)
 
 # Временные файлы — удаляются через trap
 _TMPFILES=()
@@ -613,7 +613,7 @@ case "${1:-}" in
         bash <(curl -fsSL https://raw.githubusercontent.com/HnDK0/VWN-Xray-Management-Panel-debug/main/install.sh) --update
         exit 0 ;;
 esac
-for mod in lang core xray nginx warp reality relay psiphon tor security logs backup users diag privacy adblock vision xhttp menu; do
+for mod in lang core xray nginx warp reality relay psiphon tor security logs backup users diag privacy adblock xhttp menu; do
     f="$VWN_LIB/${mod}.sh"
     [[ -f "$f" ]] && source "$f" || { echo "ERROR: module $mod not found"; exit 1; }
 done
@@ -714,7 +714,6 @@ OPT_SKIP_WS=false
 OPT_BBR=false
 OPT_FAIL2BAN=false
 OPT_NO_WARP=false
-OPT_VISION=false
 OPT_SSH_PORT=""
 OPT_JAIL=false
 OPT_IPV6=false
@@ -744,7 +743,6 @@ _parse_args() {
             --bbr)             OPT_BBR=true ;;
             --fail2ban)        OPT_FAIL2BAN=true ;;
             --no-warp)         OPT_NO_WARP=true ;;
-            --vision)          OPT_VISION=true ;;
             --ssh-port)        OPT_SSH_PORT="${2:?'--ssh-port требует значение'}";     shift ;;
             --jail)            OPT_JAIL=true ;;
             --ipv6)            OPT_IPV6=true ;;
@@ -797,7 +795,6 @@ VWN Installer v2.1  (Xray VLESS + WARP + CDN + Reality)
   --psiphon-country КОД      Страна выхода Psiphon (DE, NL, US...)
   --psiphon-warp             Psiphon через WARP
   --no-warp                  Не настраивать Cloudflare WARP
-  --vision                   Vision/TLS на порту 443 напрямую
 
 ПРИМЕРЫ:
   # Минимум — WS+CDN, SSL через HTTP:
@@ -830,7 +827,6 @@ _validate_auto_params() {
         [[ -z "$OPT_CF_KEY"   ]] && die "--cf-key обязателен при --cert-method cf"
     }
 
-    $OPT_VISION && $OPT_SKIP_WS && die "--vision несовместим с --skip-ws"
 
     [[ "$OPT_CERT_METHOD" != "cf" && "$OPT_CERT_METHOD" != "standalone" ]] \
         && die "--cert-method: допустимо 'cf' или 'standalone'"
@@ -864,7 +860,6 @@ _print_auto_params() {
     local mode=""
     $OPT_SKIP_WS && mode="Reality only (WS пропущен)" || mode="WS+TLS+CDN"
     $OPT_REALITY && mode+=" + Reality"
-    $OPT_VISION  && mode+=" + Vision"
 
     echo ""
     echo -e "${CYAN}$(printf '─%.0s' {1..64})${RESET}"
@@ -881,7 +876,6 @@ _print_auto_params() {
     ! $OPT_SKIP_WS                 && _print_param "Xray порт"   "$OPT_PORT"
     ! $OPT_SKIP_WS                 && _print_param "SSL метод"   "$OPT_CERT_METHOD"
     $OPT_REALITY                   && _print_param "Reality"     "${OPT_REALITY_DEST}  порт=${OPT_REALITY_PORT}"
-    $OPT_VISION                    && _print_param "Vision"      "$OPT_DOMAIN"
     [[ -n "$OPT_SSH_PORT" ]]       && _print_param "SSH порт"   "$OPT_SSH_PORT"
     $OPT_IPV6                      && _print_param "IPv6"        "включён"
     $OPT_CPU_GUARD                 && _print_param "CPU Guard"   "включён"
@@ -952,7 +946,6 @@ _auto_ssl() {
             --fullchain-file /etc/nginx/cert/cert.pem \
             --reloadcmd      "systemctl restart nginx || true"
 
-    # Даём пользователю xray доступ к cert.key — нужно для xray-vision
     chmod 640 /etc/nginx/cert/cert.key
     chown root:xray /etc/nginx/cert/cert.key || true
 
@@ -1035,13 +1028,6 @@ _auto_install_reality() {
     ok "Reality: порт=${OPT_REALITY_PORT}  SNI=${OPT_REALITY_DEST}"
 }
 
-_auto_install_vision() {
-    section "Vision"
-
-    # installVision — из modules/vision.sh
-    step "Установка Vision" installVision --auto
-    ok "Vision: домен=${OPT_DOMAIN}"
-}
 
 _auto_change_ssh_port() {
     local new_port="$1"
@@ -1111,7 +1097,7 @@ _auto_toggle_ipv6_on() {
 # -----------------------------------------------------------------
 # ГЛАВНАЯ ФУНКЦИЯ АВТОМАТИЧЕСКОЙ УСТАНОВКИ
 # Порядок: validate → print → load_modules → systemные пакеты →
-#          WS → Reality → Vision → опциональные
+# Порядок: WS → Reality → опциональные
 # -----------------------------------------------------------------
 _run_auto() {
     echo -e "${CYAN}$(printf '═%.0s' {1..64})${RESET}"
@@ -1185,14 +1171,6 @@ _run_auto() {
     # ── Reality ───────────────────────────────────────────────────
     $OPT_REALITY && _auto_install_reality
 
-    # ── Vision ────────────────────────────────────────────────────
-    if $OPT_VISION; then
-        set +e
-        _auto_install_vision
-        local _v_rc=$?
-        set -e
-        (( _v_rc != 0 )) && warn "Vision завершился с ошибкой (rc=${_v_rc}), продолжаем..."
-    fi
 
     # ── Опциональные компоненты (порядок важен!) ──────────────────
 
@@ -1264,7 +1242,6 @@ _print_summary() {
         _sum "WS+TLS" "домен=${OPT_DOMAIN}, CDN→443→Xray:${OPT_PORT}"
     }
     $OPT_REALITY  && _sum "Reality"   "порт=${OPT_REALITY_PORT}, SNI=${OPT_REALITY_DEST}"
-    $OPT_VISION   && _sum "Vision"    "домен=${OPT_DOMAIN}, порт=443 (прямой)"
     [[ -n "$OPT_SSH_PORT" ]] && _sum "SSH"      "порт=${OPT_SSH_PORT}"
     $OPT_IPV6      && _sum "IPv6"      "включён"
     $OPT_CPU_GUARD && _sum "CPU Guard" "включён"

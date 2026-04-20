@@ -138,7 +138,6 @@ _shredCurrentLogs() {
         /var/log/xray/access.log
         /var/log/xray/error.log
         /var/log/xray/reality-error.log
-        /var/log/xray/vision-error.log
         /var/log/nginx/access.log
         /var/log/nginx/error.log
     )
@@ -180,20 +179,20 @@ enablePrivacyMode() {
     # 1. Xray конфиги
     _xrayDisableLog "$configPath"
     _xrayDisableLog "$realityConfigPath"
-    _xrayDisableLog "$visionConfigPath"
+    _xrayDisableLog "$xhttpConfigPath"
 
     # 2. Nginx
     _nginxDisableAccessLog
     nginx -t && systemctl reload nginx || true
 
     # 3. Подавляем journald для xray-сервисов
-    for svc in xray xray-reality xray-vision; do
+    for svc in xray xray-reality xray-xhttp; do
         _systemdDisableOutput "$svc"
     done
     systemctl daemon-reload
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
 
     # 4. tmpfs для каталога логов xray (логи в RAM)
     _enableXrayLogTmpfs
@@ -222,20 +221,20 @@ disablePrivacyMode() {
     # 1. Xray конфиги — возвращаем error-логи
     _xrayRestoreLog "$configPath" "/var/log/xray/error.log"
     _xrayRestoreLog "$realityConfigPath" "/var/log/xray/reality-error.log"
-    _xrayRestoreLog "$visionConfigPath" "/var/log/xray/vision-error.log"
+    _xrayRestoreLog "$xhttpConfigPath" "/var/log/xray/xhttp-error.log"
 
     # 2. Nginx — возвращаем access_log
     _nginxRestoreAccessLog
     nginx -t && systemctl reload nginx || true
 
     # 3. Возвращаем journald
-    for svc in xray xray-reality xray-vision; do
+    for svc in xray xray-reality xray-xhttp; do
         _systemdRestoreOutput "$svc"
     done
     systemctl daemon-reload
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
 
     # 4. Убираем tmpfs
     _disableXrayLogTmpfs
@@ -290,18 +289,18 @@ showPrivacyStatus() {
             || echo -e "  ${red}✗${reset}  Nginx:        $nginx_acc"
     fi
 
-    # Xray Vision
-    if [ -f "$visionConfigPath" ]; then
-        xray_acc=$(jq -r '.log.access // "—"' "$visionConfigPath")
-        xray_lvl=$(jq -r '.log.loglevel // "—"' "$visionConfigPath")
+    # Xray XHTTP
+    if [ -f "$xhttpConfigPath" ]; then
+        xray_acc=$(jq -r '.log.access // "—"' "$xhttpConfigPath")
+        xray_lvl=$(jq -r '.log.loglevel // "—"' "$xhttpConfigPath")
         [ "$xray_acc" = "none" ] && [ "$xray_lvl" = "none" ] \
-            && echo -e "  ${green}✓${reset}  Xray Vision: access=none, loglevel=none" \
-            || echo -e "  ${red}✗${reset}  Xray Vision: access=${xray_acc}, loglevel=${xray_lvl}"
+            && echo -e "  ${green}✓${reset}  Xray XHTTP: access=none, loglevel=none" \
+            || echo -e "  ${red}✗${reset}  Xray XHTTP: access=${xray_acc}, loglevel=${xray_lvl}"
     fi
 
     # journald override
     [ -f "/etc/systemd/system/xray.service.d/no-journal.conf" ] \
-        && echo -e "  ${green}✓${reset}  journald:     stdout/stderr → null (xray, xray-reality, xray-vision)" \
+        && echo -e "  ${green}✓${reset}  journald:     stdout/stderr → null (xray, xray-reality, xray-xhttp)" \
         || echo -e "  ${red}✗${reset}  journald:     stdout/stderr → journal (xray)"
 
     # tmpfs

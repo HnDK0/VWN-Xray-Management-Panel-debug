@@ -2,9 +2,7 @@
 # =================================================================
 # nginx.sh — Nginx конфиг, CDN, SSL сертификаты
 #
-# Два режима:
-#   base   — WS+TLS на 443 (Nginx напрямую с SSL)
-#   vision — Vision на 443 (Nginx на 7443 без SSL, fallback)
+# Режим BASE: WS+TLS на 443 (Nginx напрямую с SSL)
 # =================================================================
 
 VWN_CONFIG_DIR="${VWN_CONFIG_DIR:-/usr/local/lib/vwn/config}"
@@ -55,39 +53,32 @@ writeNginxConfigBase() {
     vwn_conf_set NGINX_MODE "base"
     vwn_conf_set DOMAIN    "$domain"
 
+    # Если XHTTP установлен — инжектируем location блок
+    local xhttp_path xhttp_lport
+    xhttp_path=$(vwn_conf_get XHTTP_PATH || true)
+    xhttp_lport=$(vwn_conf_get XHTTP_LPORT || true)
+    if [ -n "$xhttp_path" ] && [ -n "$xhttp_lport" ]; then
+        _injectXhttpLocation "$xhttp_path" "$xhttp_lport"
+    fi
+
     setupRealIpRestore
     _writeSubMapConf
 }
 
-# ── Режим VISION: Vision на 443, Nginx fallback на 7443 без SSL ──
+# ── Утилиты инжекции XHTTP location ──────────────────────────────
 
-writeNginxConfigVision() {
-    local proxyUrl="$1" visionDomain="$2"
-    local proxy_host wsPath
-    proxy_host=$(echo "$proxyUrl" | sed 's|https://||;s|http://||;s|/.*||')
-    # wsPath берётся из уже записанного xray конфига (xhttp или ws)
-    wsPath=$(jq -r '.inbounds[0].streamSettings.xhttpSettings.path // .inbounds[0].streamSettings.wsSettings.path // ""' "$configPath")
-
-    setNginxCert
-
-    # nginx.conf — общая часть
-    cp "$VWN_CONFIG_DIR/nginx_main.conf" /etc/nginx/nginx.conf
-
-    # В Vision режиме default.conf не нужен — nginx_vision.conf уже содержит
-    # listen 80 default_server с редиректом на https. Удаляем чтобы не было
-    # "duplicate default server" конфликта.
-    rm -f /etc/nginx/conf.d/default.conf
-
-    # xray.conf — Vision fallback server block (HTTP, без SSL!)
-    render_config "$VWN_CONFIG_DIR/nginx_vision.conf" "$nginxPath" \
-        VISION_DOMAIN "$visionDomain" PROXY_URL "$proxyUrl" PROXY_HOST "$proxy_host" \
-        PATH "$wsPath"
-
-    vwn_conf_set STUB_URL "$proxyUrl"
-    vwn_conf_set NGINX_MODE "vision"
-
-    _writeSubMapConf
+_injectXhttpLocation() {
+    local path="$1" lport="$2"
+    [ -f "$nginxPath" ] || return 1
+    _removeXhttpLocation
+    sed -i "/    location \/ {/i\\    location ${path} {\n        proxy_pass http:\/\/127.0.0.1:${lport};\n        proxy_http_version 2.0;\n        proxy_request_buffering off;\n        access_log off;\n        error_log \/dev\/null crit;\n    }\n" "$nginxPath"
 }
+
+_removeXhttpLocation() {
+    [ -f "$nginxPath" ] || return 0
+    # Удаляем xhttp location блок по маркеру proxy_http_version 2.0
+    perl -i -0pe 's/\n    location \/[^\s{][^}]*proxy_http_version 2\.0[^}]*\}\n//gs' "$nginxPath" 2>/dev/null || true
+}: Vision на 443, Nginx fallback на 7443 без SSL ──
 
 # ── Утилиты ──────────────────────────────────────────────────────────────────
 
@@ -338,7 +329,6 @@ configCert() {
         --fullchain-file /etc/nginx/cert/cert.pem \
         --reloadcmd "systemctl reload nginx"
 
-    # Даём пользователю xray доступ к cert.key — нужно для xray-vision
     chmod 640 /etc/nginx/cert/cert.key
     chown root:xray /etc/nginx/cert/cert.key || true
 

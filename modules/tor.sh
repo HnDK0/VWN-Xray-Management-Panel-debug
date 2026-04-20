@@ -134,7 +134,7 @@ setupTorService() {
 applyTorOutbound() {
     local tor_ob='{"tag":"tor","protocol":"socks","settings":{"servers":[{"address":"127.0.0.1","port":40003}]}}'
 
-    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
         [ -f "$cfg" ] || continue
         local has_ob
         has_ob=$(jq '.outbounds[] | select(.tag=="tor")' "$cfg")
@@ -165,40 +165,40 @@ applyTorDomains() {
 
     applyTorOutbound
 
-    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
         [ -f "$cfg" ] || continue
         jq "(.routing.rules[] | select(.outboundTag == \"tor\")) |= (.domain = [$domains_json] | del(.port))" \
             "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
     done
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
     echo "${green}$(msg tor_split_ok)${reset}"
 }
 
 toggleTorGlobal() {
     applyTorOutbound
-    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
         [ -f "$cfg" ] || continue
         jq '(.routing.rules[] | select(.outboundTag == "tor")) |= (.port = "0-65535" | del(.domain))' \
             "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
     done
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
     rebuildAllSubFiles || true
     echo "${green}$(msg tor_global_ok)${reset}"
 }
 
 removeTorFromConfigs() {
-    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
         [ -f "$cfg" ] || continue
         jq 'del(.outbounds[] | select(.tag=="tor")) | del(.routing.rules[] | select(.outboundTag=="tor"))' \
             "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
     done
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
 }
 
 checkTorIP() {

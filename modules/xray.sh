@@ -598,11 +598,12 @@ modifyDomain() {
     configCert
 
     # Если Vision активен, пересобираем nginx в режиме Vision
-    if systemctl is-active --quiet xray-vision; then
+    if systemctl is-active --quiet xray-xhttp; then
         local proxy_url
         proxy_url=$(vwn_conf_get STUB_URL || echo "https://www.bing.com/")
-        writeNginxConfigVision "$proxy_url" "$new_domain"
-        systemctl restart nginx xray xray-vision
+        _injectXhttpLocation "$(vwn_conf_get XHTTP_PATH)" "$(vwn_conf_get XHTTP_LPORT)"
+        nginx -t && systemctl reload nginx
+        systemctl restart xray xray-xhttp
     else
         systemctl restart nginx xray
     fi

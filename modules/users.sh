@@ -67,15 +67,9 @@ _applyUsersToConfigs() {
         jq --argjson c "$clients_r" '.inbounds[0].settings.clients = $c' \
             "$realityConfigPath" > "${realityConfigPath}.tmp" && mv "${realityConfigPath}.tmp" "$realityConfigPath"
     fi
-    # Vision использует flow xtls-rprx-vision — тот же формат clients что у Reality
-    if [ -f "$visionConfigPath" ]; then
-        jq --argjson c "$clients_r" '.inbounds[0].settings.clients = $c' \
-            "$visionConfigPath" > "${visionConfigPath}.tmp" && mv "${visionConfigPath}.tmp" "$visionConfigPath"
-    fi
 
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
 }
 
 # ── Инициализация ─────────────────────────────────────────────────
@@ -118,7 +112,7 @@ buildUserSubFile() {
     server_ip=$(getServerIP)
     flag=$(_getCountryFlag "$server_ip")
 
-    if [ -f "$configPath" ] && [ -n "$domain" ] && [ ! -f "$visionConfigPath" ]; then
+    if [ -f "$configPath" ] && [ -n "$domain" ]; then
         local wp wep name encoded_name connect_host
         wp=$(jq -r '.inbounds[0].streamSettings.wsSettings.path // .inbounds[0].streamSettings.xhttpSettings.path // ""' "$configPath")
         wep=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1],safe='/'))" "$wp" || echo "$wp")
@@ -147,26 +141,12 @@ buildUserSubFile() {
         r_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$r_name" || echo "$r_name")
         lines+="vless://${r_uuid}@${server_ip}:${r_port}?encryption=none&security=reality&sni=${r_destHost}&fp=chrome&pbk=${r_pubKey}&sid=${r_shortId}&type=tcp&flow=xtls-rprx-vision#${r_encoded_name}"$'\n'
     fi
-
-    if [ -f "$visionConfigPath" ]; then
-        local v_domain v_uuid v_name v_encoded_name
-        v_domain=$(vwn_conf_get DOMAIN || true)
-        v_uuid=$(jq -r --arg u "$uuid" \
-            '.inbounds[0].settings.clients[] | select(.id==$u) | .id' \
-            "$visionConfigPath" | head -1)
-        [ -z "$v_uuid" ] && \
-            v_uuid=$(jq -r '.inbounds[0].settings.clients[0].id' "$visionConfigPath")
-        if [ -n "$v_domain" ] && [ -n "$v_uuid" ] && [ "$v_uuid" != "null" ]; then
-            v_name=$(_getConfigName "Vision" "$label" "$server_ip")
-            v_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$v_name" || echo "$v_name")
-            lines+="vless://${v_uuid}@${v_domain}:443?security=tls&flow=xtls-rprx-vision&type=tcp&sni=${v_domain}&fp=chrome&allowInsecure=0#${v_encoded_name}"$'\n'
-        fi
     fi
 
     if [ -f "$xhttpConfigPath" ]; then
         local x_domain x_uuid x_path x_enc_path x_name x_encoded_name
         x_domain=$(vwn_conf_get DOMAIN || true)
-        x_uuid=$(vwn_conf_get VISION_UUID || true)
+        x_uuid=$(vwn_conf_get XHTTP_UUID || true)
         x_path=$(vwn_conf_get XHTTP_PATH || true)
         if [ -n "$x_domain" ] && [ -n "$x_uuid" ] && [ -n "$x_path" ]; then
             x_enc_path=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1],safe='/'))" "$x_path" || echo "$x_path")
@@ -420,7 +400,7 @@ rebuildAllSubFiles() {
     done < "$USERS_FILE"
 
     # Перезапускаем сервисы ОДИН раз в самом конце а не на каждого пользователя
-    systemctl try-restart xray xray-reality xray-vision || true
+    systemctl try-restart xray xray-reality xray-xhttp || true
 
     echo "${green}$(msg done) ($count)${reset}"
 }

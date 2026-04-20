@@ -70,7 +70,7 @@ applyWarpDomains() {
 
     local warp_rule="{\"type\":\"field\",\"domain\":[$domains_json],\"outboundTag\":\"warp\"}"
 
-    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
         [ -f "$cfg" ] || continue
         local has_rule
         has_rule=$(jq '.routing.rules[] | select(.outboundTag=="warp")' "$cfg")
@@ -88,7 +88,7 @@ applyWarpDomains() {
     done
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
 }
 
 toggleWarpMode() {
@@ -102,7 +102,7 @@ toggleWarpMode() {
     case "$warp_mode" in
         1)
             local warp_global='{"type":"field","port":"0-65535","outboundTag":"warp"}'
-            for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+            for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
                 [ -f "$cfg" ] || continue
                 local has_rule
                 has_rule=$(jq '.routing.rules[] | select(.outboundTag=="warp")' "$cfg")
@@ -118,7 +118,7 @@ toggleWarpMode() {
             echo "${green}$(msg warp_global_ok)${reset}"
             systemctl restart xray || true
             systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
             rebuildAllSubFiles || true
             ;;
         2)
@@ -126,7 +126,7 @@ toggleWarpMode() {
             echo "${green}$(msg warp_split_ok)${reset}"
             ;;
         3)
-            for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+            for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
                 [ -f "$cfg" ] || continue
                 jq 'del(.routing.rules[] | select(.outboundTag == "warp"))' \
                     "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
@@ -134,7 +134,7 @@ toggleWarpMode() {
             echo "${green}$(msg warp_off_ok)${reset}"
             systemctl restart xray || true
             systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
             ;;
         0) return 0 ;;
         *) echo "${red}$(msg cancel)${reset}" ;;
@@ -284,7 +284,7 @@ removeWarpInteractive() {
     warp-cli disconnect || true
     
     # Удаляем правило маршрутизации из конфигов Xray
-    for cfg in "$configPath" "$realityConfigPath" "$visionConfigPath"; do
+    for cfg in "$configPath" "$realityConfigPath" "$xhttpConfigPath"; do
         if [ -f "$cfg" ]; then
             jq 'del(.routing.rules[] | select(.outboundTag == "warp"))' \
                 "$cfg" > "${cfg}.tmp" && mv "${cfg}.tmp" "$cfg"
@@ -304,7 +304,7 @@ removeWarpInteractive() {
     # Перезапускаем сервисы
     systemctl restart xray || true
     systemctl restart xray-reality || true
-    systemctl restart xray-vision || true
+    systemctl restart xray-xhttp || true
     
     # Удаляем файл доменов
     rm -f "$warpDomainsFile"

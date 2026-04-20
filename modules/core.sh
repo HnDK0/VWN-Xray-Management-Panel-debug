@@ -68,11 +68,6 @@ rebuildAllConfigs() {
         echo ""
     }
 
-    [ -f "$visionConfigPath" ] && {
-        rebuildVisionConfigs true
-        echo ""
-    }
-
     echo -e "${cyan}Rebuilding subscription files...${reset}"
     rebuildAllSubFiles || true
 
@@ -94,7 +89,6 @@ configPath='/usr/local/etc/xray/config.json'
 realityConfigPath='/usr/local/etc/xray/reality.json'
 nginxPath='/etc/nginx/conf.d/xray.conf'
 cf_key_file="/root/.cloudflare_api"
-visionConfigPath='/usr/local/etc/xray/vision.json'
 warpDomainsFile='/usr/local/etc/xray/warp_domains.txt'
 relayDomainsFile='/usr/local/etc/xray/relay_domains.txt'
 relayConfigFile='/usr/local/etc/xray/relay.conf'
@@ -342,7 +336,7 @@ setupAlias() {
 
 # Загрузка всех модулей системы
 loadAllModules() {
-    local modules=(lang core xray nginx warp reality relay psiphon tor security logs backup users diag privacy adblock vision xhttp menu)
+    local modules=(lang core xray nginx warp reality relay psiphon tor security logs backup users diag privacy adblock xhttp menu)
     
     for module in "${modules[@]}"; do
         if [ -f "$VWN_LIB/${module}.sh" ]; then

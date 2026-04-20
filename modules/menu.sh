@@ -300,7 +300,7 @@ manageWs() {
         echo -e "  ${green}5.${reset} $(msg menu_rebuild_ws)"
         echo -e "${cyan}----------------------------------------------------------------${reset}"
         echo -e "  ${green}5.${reset} $(msg menu_install)"
-        echo -e "  ${green}5.${reset} $(msg menu_remove)"
+        echo -e "  ${green}30.${reset} $(msg menu_remove)"
         echo -e "${cyan}----------------------------------------------------------------${reset}"
         echo -e "  ${green}0.${reset}  $(msg back)"
         echo -e "${cyan}================================================================${reset}"
@@ -397,34 +397,34 @@ menu() {
         echo -e "  ${green}4.${reset}  $(msg menu_reality)"
         echo -e "  ${green}5.${reset}  $(msg menu_xhttp)"
         echo -e "  $(msg menu_sep_tun)"
-        echo -e "  ${green}5.${reset}  $(msg menu_warp)"
-        echo -e "  ${green}5.${reset}  $(msg menu_relay)"
-        echo -e "  ${green}5.${reset}  $(msg menu_psiphon)"
-        echo -e "  ${green}5.${reset} $(msg menu_tor)"
+        echo -e "  ${green}6.${reset}  $(msg menu_warp)"
+        echo -e "  ${green}7.${reset}  $(msg menu_relay)"
+        echo -e "  ${green}8.${reset}  $(msg menu_psiphon)"
+        echo -e "  ${green}9.${reset}  $(msg menu_tor)"
         echo -e "  $(msg menu_sep_sec)"
-        echo -e "  ${green}5.${reset} $(msg menu_bbr)"
-        echo -e "  ${green}5.${reset} $(msg menu_f2b)"
-        echo -e "  ${green}5.${reset} $(msg menu_jail)"
-        echo -e "  ${green}5.${reset} $(msg menu_ssh)"
-        echo -e "  ${green}5.${reset} $(msg menu_ufw)"
-        echo -e "  ${green}5.${reset} $(msg menu_ipv6)"
-        echo -e "  ${green}5.${reset} $(msg menu_cpuguard)"
-        echo -e "  ${green}5.${reset} $(msg menu_adblock)"
+        echo -e "  ${green}10.${reset} $(msg menu_bbr)"
+        echo -e "  ${green}11.${reset} $(msg menu_f2b)"
+        echo -e "  ${green}12.${reset} $(msg menu_jail)"
+        echo -e "  ${green}13.${reset} $(msg menu_ssh)"
+        echo -e "  ${green}14.${reset} $(msg menu_ufw)"
+        echo -e "  ${green}15.${reset} $(msg menu_ipv6)"
+        echo -e "  ${green}16.${reset} $(msg menu_cpuguard)"
+        echo -e "  ${green}17.${reset} $(msg menu_adblock)"
         echo -e "  $(msg menu_sep_logs)"
-        echo -e "  ${green}5.${reset} $(msg menu_xray_acc)"
-        echo -e "  ${green}5.${reset} $(msg menu_xray_err)"
-        echo -e "  ${green}5.${reset} $(msg menu_nginx_acc)"
-        echo -e "  ${green}5.${reset} $(msg menu_nginx_err)"
-        echo -e "  ${green}5.${reset} $(msg menu_clear_logs)"
-        echo -e "  ${green}5.${reset} $(msg menu_privacy)"
+        echo -e "  ${green}18.${reset} $(msg menu_xray_acc)"
+        echo -e "  ${green}19.${reset} $(msg menu_xray_err)"
+        echo -e "  ${green}20.${reset} $(msg menu_nginx_acc)"
+        echo -e "  ${green}21.${reset} $(msg menu_nginx_err)"
+        echo -e "  ${green}22.${reset} $(msg menu_clear_logs)"
+        echo -e "  ${green}23.${reset} $(msg menu_privacy)"
         echo -e "  $(msg menu_sep_svc)"
-        echo -e "  ${green}5.${reset} $(msg menu_restart)"
-        echo -e "  ${green}5.${reset} $(msg menu_update_xray)"
-        echo -e "  ${green}5.${reset} $(msg menu_rebuild_all)"
-        echo -e "  ${green}5.${reset} $(msg menu_diag)"
-        echo -e "  ${green}5.${reset} $(msg menu_backup)"
-        echo -e "  ${green}5.${reset} $(msg menu_lang)"
-        echo -e "  ${green}5.${reset} $(msg menu_remove)"
+        echo -e "  ${green}24.${reset} $(msg menu_restart)"
+        echo -e "  ${green}25.${reset} $(msg menu_update_xray)"
+        echo -e "  ${green}26.${reset} $(msg menu_rebuild_all)"
+        echo -e "  ${green}27.${reset} $(msg menu_diag)"
+        echo -e "  ${green}28.${reset} $(msg menu_backup)"
+        echo -e "  ${green}29.${reset} $(msg menu_lang)"
+        echo -e "  ${green}30.${reset} $(msg menu_remove)"
         echo -e "  $(msg menu_sep_exit)"
         echo -e "  ${green}0.${reset}  $(msg menu_exit)"
         echo -e "${cyan}----------------------------------------------------------------${reset}"
@@ -435,16 +435,16 @@ menu() {
             2)  manageUsers ;;
             3)  manageWs ;;
             4)  manageReality ;;
-            6)  manageXhttp ;;
-            7)  manageWarp ;;
-            8)  manageRelay ;;
-            9)  managePsiphon ;;
-            10) manageTor ;;
-            11) enableBBR ;;
-            12) manageFail2Ban ;;
-            13) manageWebJail ;;
-            14) changeSshPort ;;
-            15) manageUFW ;;
+            5)  manageXhttp ;;
+            6)  manageWarp ;;
+            7)  manageRelay ;;
+            8)  managePsiphon ;;
+            9)  manageTor ;;
+            10) enableBBR ;;
+            11) manageFail2Ban ;;
+            12) manageWebJail ;;
+            13) changeSshPort ;;
+            14) manageUFW ;;
             15) toggleIPv6 ;;
             16) setupCpuGuard ;;
             17) manageAdblock ;;

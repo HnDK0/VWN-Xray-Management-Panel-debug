@@ -8,13 +8,11 @@ VWN_LIB="/usr/local/lib/vwn"
 # Хуки для acme.sh (должны работать без загрузки всех модулей)
 case "${1:-}" in
     "open-80")
-        command -v ufw &>/dev/null || exit 0
         ufw status | grep -q inactive && exit 0
         ufw allow from any to any port 80 proto tcp comment 'ACME temp' &>/dev/null
         exit 0
         ;;
     "close-80")
-        command -v ufw &>/dev/null || exit 0
         ufw status | grep -q inactive && exit 0
         ufw status numbered | grep 'ACME temp' | awk -F"[][]" '{print $2}' | sort -rn | while read -r n; do
             echo "y" | ufw delete "$n" &>/dev/null

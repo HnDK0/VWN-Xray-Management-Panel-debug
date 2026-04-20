@@ -87,6 +87,7 @@ reset=$(tput sgr0)
 # Пути конфигов
 configPath='/usr/local/etc/xray/config.json'
 realityConfigPath='/usr/local/etc/xray/reality.json'
+xhttpConfigPath='/usr/local/etc/xray/xhttp.json'
 nginxPath='/etc/nginx/conf.d/xray.conf'
 cf_key_file="/root/.cloudflare_api"
 warpDomainsFile='/usr/local/etc/xray/warp_domains.txt'

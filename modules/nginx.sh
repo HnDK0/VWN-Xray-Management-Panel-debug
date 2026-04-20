@@ -71,16 +71,46 @@ _injectXhttpLocation() {
     local path="$1" lport="$2"
     [ -f "$nginxPath" ] || return 1
     _removeXhttpLocation
-    sed -i "/    location \/ {/i\\    location ${path} {\n        proxy_pass http:\/\/127.0.0.1:${lport};\n        proxy_http_version 2.0;\n        proxy_request_buffering off;\n        access_log off;\n        error_log \/dev\/null crit;\n    }\n" "$nginxPath"
+    # Используем Python для надёжной многострочной вставки перед «    location / {»
+    python3 - "$nginxPath" "$path" "$lport" << 'PYEOF'
+import sys
+fpath, xpath, lport = sys.argv[1], sys.argv[2], sys.argv[3]
+block = (
+    f"    location {xpath} {{\n"
+    f"        proxy_pass http://127.0.0.1:{lport};\n"
+    f"        proxy_http_version 2.0;\n"
+    f"        proxy_request_buffering off;\n"
+    f"        access_log off;\n"
+    f"        error_log /dev/null crit;\n"
+    f"    }}\n\n"
+)
+content = open(fpath).read()
+marker = "    location / {"
+if marker in content:
+    content = content.replace(marker, block + marker, 1)
+    open(fpath, "w").write(content)
+else:
+    sys.exit(1)
+PYEOF
 }
 
 _removeXhttpLocation() {
     [ -f "$nginxPath" ] || return 0
-    # Удаляем xhttp location блок по маркеру proxy_http_version 2.0
-    perl -i -0pe 's/\n    location \/[^\s{][^}]*proxy_http_version 2\.0[^}]*\}\n//gs' "$nginxPath" 2>/dev/null || true
+    # Удаляем xhttp location блок (маркер: proxy_http_version 2.0)
+    python3 - "$nginxPath" << 'PYEOF'
+import sys, re
+fpath = sys.argv[1]
+content = open(fpath).read()
+# Удаляем блок вида: «    location /path { ... proxy_http_version 2.0; ... }\n\n»
+pattern = re.compile(
+    r'    location /[^\s{][^\n]*\{[^}]*proxy_http_version 2\.0;[^}]*\}\n\n',
+    re.DOTALL
+)
+new = pattern.sub('', content)
+if new != content:
+    open(fpath, 'w').write(new)
+PYEOF
 }
-
-# ── Режим VISION: Vision на 443, Nginx fallback на 7443 без SSL ──
 
 # ── Утилиты ──────────────────────────────────────────────────────────────────
 

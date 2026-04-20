@@ -402,9 +402,7 @@ _cleanup() {
     rm -f "$VWN_LOCK_FILE" || true
 
     # Удаляем tmp-конфиги если были созданы
-    for dir in /usr/local/etc/xray /etc/nginx; do
-        [ -d "$dir" ] && find "$dir" -name "*.tmp" -delete
-    done
+    find /usr/local/etc/xray /etc/nginx -name "*.tmp" -delete || true
 
     # Закрываем 80-й порт если был открыт для ACME
     [[ -x "$VWN_BIN" ]] && "$VWN_BIN" close-80 || true

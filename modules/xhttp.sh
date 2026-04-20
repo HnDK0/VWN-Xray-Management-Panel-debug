@@ -1,13 +1,11 @@
 #!/bin/bash
 # =================================================================
-# xhttp.sh — VLESS + Vision + XHTTP Transport (CDN совместимый)
+# xhttp.sh — VLESS + XHTTP Transport (CDN совместимый)
 #
 # Архитектура:
-#   ✅ Работает параллельно с Vision на одном порту 443
-#   ✅ Xray XHTTP инбаунд слушает локально на 127.0.0.1:45000
-#   ✅ Nginx пробрасывает трафик с пути /xhttp на этот инбаунд
+#   ✅ Xray XHTTP инбаунд слушает локально на 127.0.0.1:XHTTP_LPORT
+#   ✅ Nginx пробрасывает трафик с XHTTP_PATH на этот инбаунд
 #   ✅ Полностью совместим со всеми CDN включая Cloudflare
-#   ✅ Никаких конфликтов с существующей конфигурацией
 # =================================================================
 
 XHTTP_SERVICE="/etc/systemd/system/xray-xhttp.service"
@@ -45,6 +43,7 @@ writeXhttpConfig() {
     local uuid="$1"
     local path="$2"
     local domain="$3"
+    local lport="$4"
 
     mkdir -p "$(dirname "$xhttpConfigPath")"
     _ensureXhttpLogAccess
@@ -52,7 +51,8 @@ writeXhttpConfig() {
     render_config "$VWN_CONFIG_DIR/xray_xhttp.json" "$xhttpConfigPath" \
         UUID "$uuid" \
         PATH "$path" \
-        DOMAIN "$domain"
+        DOMAIN "$domain" \
+        XHTTP_LPORT "$lport"
 
     chown xray:xray "$xhttpConfigPath" || true
     chmod 640 "$xhttpConfigPath" || true
@@ -134,7 +134,7 @@ installXhttp() {
 
     clear
     echo -e "${cyan}================================================================${reset}"
-    echo -e "   Vision + XHTTP Transport (CDN Compatible)"
+    echo -e "   XHTTP Transport (CDN Compatible)"
     echo -e "${cyan}================================================================${reset}"
     echo ""
 
@@ -164,7 +164,7 @@ installXhttp() {
 
     # Конфиг Xray
     echo -e "${cyan}Установка XHTTP конфигурации...${reset}"
-    writeXhttpConfig "$xhttp_uuid" "$xhttp_path" "$xhttp_domain"
+    writeXhttpConfig "$xhttp_uuid" "$xhttp_path" "$xhttp_domain" "$lport"
 
     # Инжектируем location в nginx конфиг
     _injectXhttpLocation "$xhttp_path" "$lport"
@@ -179,6 +179,7 @@ installXhttp() {
     # Сохраняем мета-данные
     vwn_conf_set XHTTP_ENABLED "true"
     vwn_conf_set XHTTP_PATH "$xhttp_path"
+    vwn_conf_set XHTTP_UUID "$xhttp_uuid"
 
     # Итог
     echo ""
@@ -206,18 +207,16 @@ showXhttpInfo() {
     path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
 
     echo ""
-    echo -e "${cyan}━━━ Vision XHTTP (CDN) ━━━${reset}"
+    echo -e "${cyan}━━━ XHTTP (CDN транспорт) ━━━${reset}"
     echo ""
     echo -e "  ${cyan}Домен:${reset}  ${green}${domain:-?}${reset}"
     echo -e "  ${cyan}UUID:${reset}    ${green}${uuid:-?}${reset}"
     echo -e "  ${cyan}Порт:${reset}    ${green}443${reset}"
     echo -e "  ${cyan}Путь:${reset}    ${green}${path}${reset}"
-    echo -e "  ${cyan}Тип:${reset}     VLESS + XHTTP"
-    echo -e "  ${cyan}Тип:${reset}     xhttp"
+    echo -e "  ${cyan}Транспорт:${reset} VLESS + XHTTP"
     echo -e "  ${cyan}Статус:${reset}  $(getXhttpStatus)"
     echo ""
     echo -e " ✅ Полностью совместимо со всеми CDN"
-    echo -e " ✅ Работает параллельно с обычным Vision"
     echo ""
 }
 
@@ -296,14 +295,20 @@ rebuildXhttpConfigs() {
         echo "${red}XHTTP не установлен${reset}"; return 1
     fi
 
-    local xhttp_uuid xhttp_path xhttp_domain
+    local xhttp_uuid xhttp_path xhttp_domain xhttp_lport
     xhttp_uuid=$(vwn_conf_get XHTTP_UUID || true)
     xhttp_path=$(vwn_conf_get XHTTP_PATH || echo "/xhttp")
     xhttp_domain=$(vwn_conf_get DOMAIN || true)
+    xhttp_lport=$(vwn_conf_get XHTTP_LPORT || true)
+
+    if [ -z "$xhttp_lport" ]; then
+        echo "${red}XHTTP_LPORT не задан в vwn.conf — переустановите XHTTP${reset}"
+        return 1
+    fi
 
     echo -e "${cyan}Rebuilding XHTTP configs...${reset}"
 
-    writeXhttpConfig "$xhttp_uuid" "$xhttp_path" "$xhttp_domain"
+    writeXhttpConfig "$xhttp_uuid" "$xhttp_path" "$xhttp_domain" "$xhttp_lport"
     _xhttpApplyActiveFeatures
 
     systemctl restart xray-xhttp || true

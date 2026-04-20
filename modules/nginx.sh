@@ -78,7 +78,9 @@ _removeXhttpLocation() {
     [ -f "$nginxPath" ] || return 0
     # Удаляем xhttp location блок по маркеру proxy_http_version 2.0
     perl -i -0pe 's/\n    location \/[^\s{][^}]*proxy_http_version 2\.0[^}]*\}\n//gs' "$nginxPath" 2>/dev/null || true
-}: Vision на 443, Nginx fallback на 7443 без SSL ──
+}
+
+# ── Режим VISION: Vision на 443, Nginx fallback на 7443 без SSL ──
 
 # ── Утилиты ──────────────────────────────────────────────────────────────────
 

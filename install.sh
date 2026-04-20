@@ -1002,6 +1002,13 @@ _auto_install_ws() {
     ok "WS+TLS установлен"
 }
 
+_auto_install_xhttp() {
+    section "XHTTP (CDN транспорт)"
+    # installXhttp — из modules/xhttp.sh
+    installXhttp --auto
+    ok "XHTTP установлен"
+}
+
 _auto_install_reality() {
     section "Reality"
 
@@ -1169,6 +1176,18 @@ _run_auto() {
 
     # ── Reality ───────────────────────────────────────────────────
     $OPT_REALITY && _auto_install_reality
+
+    # ── XHTTP ────────────────────────────────────────────────────
+    if ! $OPT_SKIP_WS && [ ! -f "$xhttpConfigPath" ]; then
+        set +e
+        _auto_install_xhttp
+        local _xhttp_rc=$?
+        set -e
+        if (( _xhttp_rc != 0 )); then
+            warn "XHTTP установка завершилась с ошибкой (rc=${_xhttp_rc}), продолжаем..."
+            log_warn "XHTTP install rc=${_xhttp_rc}"
+        fi
+    fi
 
     # ── Vision ────────────────────────────────────────────────────
 

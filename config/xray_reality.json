@@ -70,6 +70,11 @@
         "rules": [
             {
                 "type": "field",
+                "ip": ["127.0.0.53"],
+                "outboundTag": "dns-out"
+            },
+            {
+                "type": "field",
                 "ip": ["geoip:private"],
                 "outboundTag": "block"
             },

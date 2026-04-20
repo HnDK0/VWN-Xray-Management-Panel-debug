@@ -141,7 +141,6 @@ buildUserSubFile() {
         r_encoded_name=$(python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$r_name" || echo "$r_name")
         lines+="vless://${r_uuid}@${server_ip}:${r_port}?encryption=none&security=reality&sni=${r_destHost}&fp=chrome&pbk=${r_pubKey}&sid=${r_shortId}&type=tcp&flow=xtls-rprx-vision#${r_encoded_name}"$'\n'
     fi
-    fi
 
     if [ -f "$xhttpConfigPath" ]; then
         local x_domain x_uuid x_path x_enc_path x_name x_encoded_name
